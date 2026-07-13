@@ -1,0 +1,164 @@
+/* YA Painel — Design Tokens
+ * Reads §3 of foundations. CSS custom properties only. Theme via [data-theme].
+ */
+
+/* ===== Fonts ===== */
+@import url('https://fonts.googleapis.com/css2?family=Newsreader:wght@400;500&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+/* ===== Dark (default) ===== */
+:root,
+[data-theme="dark"] {
+  --bg-base: #0E0D0B;
+  --bg-surface: #16140F;
+  --bg-elevated: #1F1C16;
+  --bg-subtle: #221F19;
+  --bg-overlay: rgba(0,0,0,0.7);
+
+  --border-subtle: #2A2620;
+  --border-default: #3A352D;
+  --border-strong: #5C574F;
+
+  --text-primary: #F5F2EC;
+  --text-secondary: #A8A39A;
+  --text-muted: #6B665E;
+  --text-disabled: #3A352D;
+  --text-inverse: #0E0D0B;
+
+  --brand: #F5B820;
+  --brand-hover: #FFC940;
+  --brand-active: #E5A400;
+  --brand-subtle: #2A220E;
+  --brand-subtle-hover: #3A2D0E;
+  --brand-border: #F5B820;
+
+  --success: #34D399;
+  --success-subtle: #0F2A22;
+  --success-border: #0E8A5F;
+
+  --warning: #FB923C;
+  --warning-subtle: #2A1A0C;
+  --warning-border: #D97706;
+
+  --danger: #F87171;
+  --danger-subtle: #2A1414;
+  --danger-border: #DC2626;
+
+  --info: #60A5FA;
+  --info-subtle: #0C1A36;
+  --info-border: #2563EB;
+
+  --neutral: #A3A3A3;
+  --neutral-subtle: #221F19;
+  --neutral-border: #5C574F;
+
+  /* Shadows: none in dark */
+  --shadow-sm: none;
+  --shadow-md: none;
+  --shadow-lg: none;
+  --shadow-focus: 0 0 0 3px rgba(245, 184, 32, 0.22);
+  --shadow-focus-danger: 0 0 0 3px rgba(248, 113, 113, 0.22);
+}
+
+/* ===== Light ===== */
+[data-theme="light"] {
+  --bg-base: #FAFAF7;
+  --bg-surface: #FFFFFF;
+  --bg-elevated: #F5F5F2;
+  --bg-subtle: #F0EFEA;
+  --bg-overlay: rgba(0,0,0,0.4);
+
+  --border-subtle: #EAE7DF;
+  --border-default: #D4D0C5;
+  --border-strong: #A8A39A;
+
+  --text-primary: #1A1611;
+  --text-secondary: #5C574F;
+  --text-muted: #8B857B;
+  --text-disabled: #C5C0B5;
+  --text-inverse: #FFFFFF;
+
+  --brand: #E5A400;
+  --brand-hover: #C98E00;
+  --brand-active: #B27D00;
+  --brand-subtle: #FDF6E3;
+  --brand-subtle-hover: #FAEED0;
+  --brand-border: #F5B820;
+
+  --success: #0E8A5F;
+  --success-subtle: #E8F5EF;
+  --success-border: #34D399;
+
+  --warning: #D97706;
+  --warning-subtle: #FEF3E2;
+  --warning-border: #FB923C;
+
+  --danger: #DC2626;
+  --danger-subtle: #FCE8E8;
+  --danger-border: #F87171;
+
+  --info: #2563EB;
+  --info-subtle: #E5EDFD;
+  --info-border: #60A5FA;
+
+  --neutral: #737373;
+  --neutral-subtle: #F0EFEA;
+  --neutral-border: #A3A3A3;
+
+  --shadow-sm: 0 1px 2px rgba(20,16,8,0.04);
+  --shadow-md: 0 4px 8px rgba(20,16,8,0.06), 0 1px 2px rgba(20,16,8,0.04);
+  --shadow-lg: 0 12px 24px rgba(20,16,8,0.08), 0 4px 8px rgba(20,16,8,0.04);
+  --shadow-focus: 0 0 0 3px rgba(229,164,0,0.20);
+  --shadow-focus-danger: 0 0 0 3px rgba(220,38,38,0.20);
+}
+
+/* ===== Base typographic resets ===== */
+.ya-root {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--text-primary);
+  background: var(--bg-base);
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: 'cv11', 'ss01';
+}
+.ya-root * { box-sizing: border-box; }
+.ya-serif { font-family: 'Newsreader', Georgia, ui-serif, serif; font-weight: 500; letter-spacing: -0.015em; }
+.ya-mono { font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace; font-feature-settings: 'tnum' 1; }
+.ya-tnum { font-variant-numeric: tabular-nums; }
+
+/* Eyebrow */
+.ya-eyebrow {
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+/* Shimmer for skeletons */
+@keyframes ya-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.ya-skeleton {
+  background: linear-gradient(90deg, var(--bg-subtle) 0%, var(--bg-elevated) 50%, var(--bg-subtle) 100%);
+  background-size: 200% 100%;
+  animation: ya-shimmer 1.5s linear infinite;
+  border-radius: 4px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ya-skeleton { animation: none; background: var(--bg-subtle); }
+}
+
+/* Scrollbars */
+.ya-root ::-webkit-scrollbar { width: 10px; height: 10px; }
+.ya-root ::-webkit-scrollbar-track { background: transparent; }
+.ya-root ::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 6px; border: 2px solid transparent; background-clip: padding-box; }
+.ya-root ::-webkit-scrollbar-thumb:hover { background: var(--border-strong); background-clip: padding-box; border: 2px solid transparent; }
+
+/* Theme wrapper used inside artboards */
+.ya-theme {
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: 'Inter', sans-serif;
+}

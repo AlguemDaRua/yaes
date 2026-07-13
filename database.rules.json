@@ -1,0 +1,359 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "promoCodes": {
+      ".read": "auth != null",
+      ".write": "auth != null && root.child('admins/' + auth.uid).val() === true"
+    },
+    "users": {
+      ".indexOn": [
+        "partnerId",
+        "type",
+        "phone"
+      ],
+      ".read": "auth != null && (root.child('admins/' + auth.uid).val() === true || root.child('users/' + auth.uid + '/type').val() === 'support')",
+      "$uid": {
+        ".read": "auth != null",
+        ".write": "$uid === auth.uid",
+        ".validate": "newData.hasChildren(['phone', 'type', 'createdAt'])",
+        "type": {
+          ".write": "auth != null && (root.child('admins/' + auth.uid).val() === true || ($uid === auth.uid && newData.val() === 'passenger'))",
+          ".validate": "newData.val() === 'passenger' || newData.val() === 'driver' || newData.val() === 'admin' || newData.val() === 'partner_owner' || newData.val() === 'partner_staff' || newData.val() === 'support'"
+        },
+        "partnerId": {
+          ".validate": "!newData.exists() || newData.isString()"
+        },
+        "role": {
+          ".validate": "!newData.exists() || newData.isString()"
+        },
+        "rating": {
+          ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 5)"
+        },
+        "ratingCount": {
+          ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0)"
+        },
+        "phone": {
+          ".validate": "newData.isString() && newData.val().length >= 9"
+        },
+        "name": {
+          ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 100)"
+        },
+        "email": {
+          ".validate": "!newData.exists() || (newData.isString() && newData.val().length <= 200)"
+        },
+        "fcmToken": {
+          ".validate": "newData.isString()"
+        },
+        "$other": {
+          ".validate": "true"
+        }
+      }
+    },
+    "trips": {
+      ".indexOn": [
+        "driver",
+        "passenger",
+        "partnerId"
+      ],
+      ".read": "auth != null",
+      "$tripId": {
+        ".read": "auth != null && (data.child('passenger').val() === auth.uid || data.child('driver').val() === auth.uid || data.child('status').val() === 'pending')",
+        ".write": "auth != null && (!data.exists() || data.child('passenger').val() === auth.uid ||data.child('driver').val() === auth.uid || (data.child('status').val() === 'pending' && !data.child('driver').exists() && newData.child('driver').val() === auth.uid && newData.child('status').val() === 'accepted'))",
+        ".validate": "newData.hasChildren(['passenger', 'origin', 'destination', 'status', 'paymentMethod', 'tipo'])",
+        "tipo": {
+          ".validate": "newData.val() === 'regular' || newData.val() === 'scheduled' || newData.val() === 'airport' || newData.val() === 'event'"
+        },
+        "tripType": {
+          ".validate": "!newData.exists() || newData.val() === 'regular' || newData.val() === 'scheduled' || newData.val() === 'airport' || newData.val() === 'event'"
+        },
+        "status": {
+          ".validate": "newData.val() === 'awaiting_payment' || newData.val() === 'pending' || newData.val() === 'accepted' || newData.val() === 'started' || newData.val() === 'completed' || newData.val() === 'cancelled'"
+        },
+        "estimatedPrice": {
+          ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0)"
+        },
+        "surgeMultiplier": {
+          ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 1.0 && newData.val() <= 2.0)"
+        },
+        "carCategory": {
+          ".validate": "!newData.exists() || newData.isString()"
+        },
+        "$other": {
+          ".validate": "true"
+        }
+      }
+    },
+    "drivers": {
+      ".indexOn": [
+        "online",
+        "location"
+      ],
+      ".read": "auth != null",
+      "$uid": {
+        "location": {
+          ".read": "auth != null",
+          ".write": "$uid === auth.uid",
+          ".validate": "newData.hasChildren(['lat', 'lng', 'angle', 'updatedAt'])",
+          "lat": {
+            ".validate": "newData.isNumber() && newData.val() >= -90 && newData.val() <= 90"
+          },
+          "lng": {
+            ".validate": "newData.isNumber() && newData.val() >= -180 && newData.val() <= 180"
+          },
+          "angle": {
+            ".validate": "newData.isNumber()"
+          },
+          "updatedAt": {
+            ".validate": "newData.isString()"
+          }
+        },
+        "online": {
+          ".read": "auth != null",
+          ".write": "$uid === auth.uid",
+          ".validate": "newData.isBoolean()"
+        }
+      }
+    },
+    "bookings": {
+      "$bookingId": {
+        ".read": "auth != null && (data.child('passenger').val() === auth.uid)",
+        ".write": "auth != null && (!data.exists() || data.child('passenger').val() === auth.uid)",
+        ".validate": "newData.hasChildren(['passenger', 'route', 'seat', 'date', 'status'])",
+        "status": {
+          ".validate": "newData.val() === 'confirmed' || newData.val() === 'cancelled' || newData.val() === 'completed'"
+        },
+        "$other": {
+          ".validate": "true"
+        }
+      }
+    },
+    "schedules": {
+      ".read": "auth != null",
+      "$uid": {
+        ".read": "$uid === auth.uid",
+        ".write": "$uid === auth.uid",
+        "$scheduleId": {
+          ".validate": "newData.hasChildren(['originLocation', 'destinationLocation', 'time'])",
+          "$other": {
+            ".validate": "true"
+          }
+        }
+      }
+    },
+    "routes": {
+      ".read": "auth != null",
+      ".write": false
+    },
+    "admins": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid === $uid || root.child('admins/' + auth.uid).val() === true)",
+        ".write": false,
+        ".validate": "newData.isBoolean()"
+      }
+    },
+    "partners": {
+      ".indexOn": [
+        "status",
+        "city"
+      ],
+      "$partnerId": {
+        ".read": "auth != null && (root.child('admins/' + auth.uid).val() === true || root.child('users/' + auth.uid + '/partnerId').val() === $partnerId || root.child('users/' + auth.uid + '/type').val() === 'support')",
+        ".write": "auth != null && (root.child('admins/' + auth.uid).val() === true || (root.child('users/' + auth.uid + '/partnerId').val() === $partnerId && root.child('users/' + auth.uid + '/type').val() === 'partner_owner'))",
+        ".validate": "newData.hasChildren(['name', 'nuit', 'city', 'status', 'createdAt'])",
+        "name": {
+          ".validate": "newData.isString() && newData.val().length >= 2"
+        },
+        "nuit": {
+          ".validate": "newData.isString()"
+        },
+        "status": {
+          ".validate": "newData.val() === 'pending' || newData.val() === 'active' || newData.val() === 'suspended'"
+        },
+        "vehicles": {
+          "$vehicleId": {
+            ".validate": "newData.hasChildren(['plate', 'model', 'type', 'status'])"
+          }
+        },
+        "drivers": {
+          "$driverUid": {
+            ".validate": true
+          }
+        },
+        "$other": {
+          ".validate": true
+        }
+      },
+      ".read": "auth != null && (root.child('admins/' + auth.uid).val() === true || root.child('users/' + auth.uid + '/type').val() === 'support')"
+    },
+    "documents": {
+      "$ownerType": {
+        "$ownerId": {
+          ".read": "auth != null && (root.child('admins/' + auth.uid).val() === true || $ownerId === auth.uid || (root.child('users/' + auth.uid + '/type').val() === 'partner_owner' && root.child('users/' + $ownerId + '/partnerId').val() === root.child('users/' + auth.uid + '/partnerId').val()))",
+          ".write": "auth != null && (root.child('admins/' + auth.uid).val() === true || $ownerId === auth.uid)",
+          "$docId": {
+            ".validate": "newData.hasChildren(['type', 'url', 'status', 'uploadedAt'])"
+          }
+        }
+      },
+      ".read": "auth != null && (root.child('admins/' + auth.uid).val() === true || root.child('users/' + auth.uid + '/type').val() === 'support')"
+    },
+    "alerts": {
+      ".indexOn": [
+        "partnerId",
+        "severity",
+        "resolved"
+      ],
+      "$alertId": {
+        ".read": "auth != null && (root.child('admins/' + auth.uid).val() === true || root.child('users/' + auth.uid + '/type').val() === 'support' || data.child('partnerId').val() === root.child('users/' + auth.uid + '/partnerId').val())",
+        ".write": "auth != null && (root.child('admins/' + auth.uid).val() === true || root.child('users/' + auth.uid + '/type').val() === 'support')",
+        ".validate": "newData.hasChildren(['title', 'severity', 'createdAt', 'resolved'])"
+      },
+      ".read": "auth != null && (root.child('admins/' + auth.uid).val() === true || root.child('users/' + auth.uid + '/type').val() === 'support')"
+    },
+    "tickets": {
+      ".indexOn": [
+        "status",
+        "priority",
+        "assignedTo",
+        "partnerId"
+      ],
+      "$ticketId": {
+        ".read": "auth != null && (root.child('admins/' + auth.uid).val() === true || root.child('users/' + auth.uid + '/type').val() === 'support' || data.child('authorUid').val() === auth.uid || data.child('partnerId').val() === root.child('users/' + auth.uid + '/partnerId').val())",
+        ".write": "auth != null && (root.child('admins/' + auth.uid).val() === true || root.child('users/' + auth.uid + '/type').val() === 'support' || (!data.exists() && newData.child('authorUid').val() === auth.uid))",
+        "messages": {
+          "$msgId": {
+            ".validate": "newData.hasChildren(['author', 'text', 'createdAt'])"
+          }
+        }
+      },
+      ".read": "auth != null && (root.child('admins/' + auth.uid).val() === true || root.child('users/' + auth.uid + '/type').val() === 'support')"
+    },
+    "disputes": {
+      "$disputeId": {
+        ".read": "auth != null && (root.child('admins/' + auth.uid).val() === true || root.child('users/' + auth.uid + '/type').val() === 'support')",
+        ".write": "auth != null && (root.child('admins/' + auth.uid).val() === true || root.child('users/' + auth.uid + '/type').val() === 'support')"
+      },
+      ".read": "auth != null && (root.child('admins/' + auth.uid).val() === true || root.child('users/' + auth.uid + '/type').val() === 'support')"
+    },
+    "messages": {
+      ".indexOn": [
+        "partnerId",
+        "assignedTo"
+      ],
+      "$threadId": {
+        ".read": "auth != null && (root.child('admins/' + auth.uid).val() === true || root.child('users/' + auth.uid + '/type').val() === 'support' || data.child('participantUids/' + auth.uid).val() === true || data.child('partnerId').val() === root.child('users/' + auth.uid + '/partnerId').val())",
+        ".write": "auth != null && (root.child('admins/' + auth.uid).val() === true || root.child('users/' + auth.uid + '/type').val() === 'support' || data.child('participantUids/' + auth.uid).val() === true || newData.child('participantUids/' + auth.uid).val() === true)",
+        "messages": {
+          "$msgId": {
+            ".validate": "newData.hasChildren(['from', 'text', 'timestamp'])"
+          }
+        },
+        "$other": {
+          ".validate": true
+        }
+      },
+      ".read": "auth != null && (root.child('admins/' + auth.uid).val() === true || root.child('users/' + auth.uid + '/type').val() === 'support')"
+    },
+    "commissions": {
+      "$partnerId": {
+        ".read": "auth != null && (root.child('admins/' + auth.uid).val() === true || root.child('users/' + auth.uid + '/partnerId').val() === $partnerId)",
+        ".write": "auth != null && root.child('admins/' + auth.uid).val() === true"
+      },
+      ".read": "auth != null && (root.child('admins/' + auth.uid).val() === true || root.child('users/' + auth.uid + '/type').val() === 'support')"
+    },
+    "incentives": {
+      ".read": "auth != null",
+      "$campaignId": {
+        ".write": "auth != null && root.child('admins/' + auth.uid).val() === true"
+      }
+    },
+    "payouts": {
+      "$partnerId": {
+        ".read": "auth != null && (root.child('admins/' + auth.uid).val() === true || root.child('users/' + auth.uid + '/partnerId').val() === $partnerId)",
+        ".write": false
+      },
+      ".read": "auth != null && (root.child('admins/' + auth.uid).val() === true || root.child('users/' + auth.uid + '/type').val() === 'support')"
+    },
+    "chats": {
+      "$tripId": {
+        ".read": "auth != null && (root.child('trips').child($tripId).child('passenger').val() === auth.uid || root.child('trips').child($tripId).child('driver').val() === auth.uid)",
+        "messages": {
+          "$messageId": {
+            ".write": "auth != null && !data.exists() && newData.child('senderId').val() === auth.uid && (root.child('trips').child($tripId).child('passenger').val() === auth.uid || root.child('trips').child($tripId).child('driver').val() === auth.uid)",
+            ".validate": "newData.hasChildren(['senderId', 'senderType', 'text', 'timestamp', 'read'])",
+            "read": {
+              ".write": "auth != null && (root.child('trips').child($tripId).child('passenger').val() === auth.uid || root.child('trips').child($tripId).child('driver').val() === auth.uid)"
+            }
+          }
+        }
+      }
+    },
+    "payments": {
+      ".indexOn": [
+        "passenger",
+        "tripId",
+        "pspRef",
+        "status"
+      ],
+      ".read": "auth != null && (root.child('admins/' + auth.uid).val() === true || root.child('users/' + auth.uid + '/type').val() === 'support')",
+      "$paymentId": {
+        ".read": "auth != null && (root.child('admins/' + auth.uid).val() === true || root.child('users/' + auth.uid + '/type').val() === 'support' || data.child('passenger').val() === auth.uid)",
+        ".write": false
+      }
+    },
+    "audit": {
+      ".read": "auth != null && (root.child('admins/' + auth.uid).val() === true || root.child('users/' + auth.uid + '/type').val() === 'support')",
+      ".write": false
+    },
+    "config": {
+      ".read": "auth != null",
+      ".write": "auth != null && root.child('admins/' + auth.uid).val() === true"
+    },
+    "broadcasts": {
+      ".read": "auth != null && (root.child('admins/' + auth.uid).val() === true || root.child('users/' + auth.uid + '/type').val() === 'support')",
+      ".write": false
+    },
+    "driverWallets": {
+      "$partnerId": {
+        ".read": "auth != null && (root.child('admins/' + auth.uid).val() === true || root.child('users/' + auth.uid + '/partnerId').val() === $partnerId)",
+        "$driverId": {
+          ".read": "auth != null && ($driverId === auth.uid || root.child('admins/' + auth.uid).val() === true || root.child('users/' + auth.uid + '/partnerId').val() === $partnerId)"
+        },
+        ".write": false
+      },
+      ".read": "auth != null && (root.child('admins/' + auth.uid).val() === true || root.child('users/' + auth.uid + '/type').val() === 'support')"
+    },
+    "walletTopups": {
+      ".indexOn": ["driverId", "pspRef", "status"],
+      ".read": "auth != null && (root.child('admins/' + auth.uid).val() === true || root.child('users/' + auth.uid + '/type').val() === 'support')",
+      "$topupId": {
+        ".read": "auth != null && (root.child('admins/' + auth.uid).val() === true || root.child('users/' + auth.uid + '/type').val() === 'support' || data.child('driverId').val() === auth.uid)",
+        ".write": false
+      }
+    },
+    "ratings": {
+      "$driverId": {
+        ".read": "auth != null && ($driverId === auth.uid || root.child('admins/' + auth.uid).val() === true || root.child('users/' + auth.uid + '/type').val() === 'support')",
+        ".write": false
+      },
+      ".read": "auth != null && (root.child('admins/' + auth.uid).val() === true || root.child('users/' + auth.uid + '/type').val() === 'support')"
+    },
+    "notifications": {
+      "$uid": {
+        ".read": "auth != null && ($uid === auth.uid || root.child('admins/' + auth.uid).val() === true)",
+        ".write": "auth != null && $uid === auth.uid",
+        "$notificationId": {
+          ".validate": "newData.hasChildren(['title', 'body', 'type', 'createdAt'])",
+          "read": {
+            ".validate": "newData.isBoolean()"
+          },
+          "$other": {
+            ".validate": true
+          }
+        }
+      },
+      ".read": "auth != null && root.child('admins/' + auth.uid).val() === true"
+    }
+  }
+}

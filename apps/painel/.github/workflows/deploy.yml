@@ -1,0 +1,42 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main, master]
+
+env:
+  FLUTTER_VERSION: "3.44.1"
+
+jobs:
+  deploy:
+    name: Deploy to Firebase Hosting
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Generate l10n
+        run: flutter gen-l10n
+
+      - name: Build web (release)
+        run: |
+          flutter build web --release \
+            --dart-define=USE_FIREBASE=true \
+            --dart-define=USE_EMULATORS=false
+
+      - name: Deploy to Firebase Hosting
+        uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_YA_APP_Z }}
+          channelId: live
+          projectId: ya-app-z
+          entryPoint: ./firebase

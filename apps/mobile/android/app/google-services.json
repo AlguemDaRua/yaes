@@ -1,0 +1,99 @@
+{
+  "project_info": {
+    "project_number": "432248591325",
+    "firebase_url": "https://ya-app-z-default-rtdb.firebaseio.com",
+    "project_id": "ya-app-z",
+    "storage_bucket": "ya-app-z.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:432248591325:android:a94a81ddf2a53f2fa89c34",
+        "android_client_info": {
+          "package_name": "com.example.limousineexecutive"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "432248591325-27jsvt6huv3h5p114jupml6cug0bcl84.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.limousineexecutive",
+            "certificate_hash": "eed751d0a7107d8d1f0d8818372cfa29dca3c62d"
+          }
+        },
+        {
+          "client_id": "432248591325-b4dcl43ei148np46j5nsrepot4d3d17g.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCZUfA5L6poVTO2c6xANv-oW3lK4TDQ8xQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "432248591325-b4dcl43ei148np46j5nsrepot4d3d17g.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "432248591325-6kmamhbvlmpo1u6nohq1j8u5agkifg0t.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.limousineexecutive"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:432248591325:android:2cd70d8e5d9b3958a89c34",
+        "android_client_info": {
+          "package_name": "mz.co.ya.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "432248591325-qd7f57mt4aeetgb61i7u4lro157iks1h.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "mz.co.ya.app",
+            "certificate_hash": "a11dc1cbbe2ca49c9717b0c2e44770ab492ec643"
+          }
+        },
+        {
+          "client_id": "432248591325-b4dcl43ei148np46j5nsrepot4d3d17g.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCZUfA5L6poVTO2c6xANv-oW3lK4TDQ8xQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "432248591325-b4dcl43ei148np46j5nsrepot4d3d17g.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "432248591325-6kmamhbvlmpo1u6nohq1j8u5agkifg0t.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.limousineexecutive"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

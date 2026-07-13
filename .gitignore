@@ -1,0 +1,50 @@
+# Claude / Codex local state
+.claude/
+.codex/
+
+# Notes (keep READMEs)
+*.md
+!README.md
+!**/README.md
+!CHANGELOG.md
+!**/CHANGELOG.md
+
+# Flutter/Dart build artifacts
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/.pub-cache/
+**/.pub/
+**/build/
+**/ios/Flutter/.last_build_id
+**/android/app/debug
+**/android/app/profile
+**/android/app/release
+**/app.*.symbols
+**/app.*.map.json
+**/migrate_working_dir/
+**/doc/api/
+
+# Node / Cloud Functions
+functions/node_modules/
+functions/lib/
+**/node_modules/
+
+# Firebase local state
+.firebase/
+firebase-debug.log
+firebase-debug.*.log
+*.local
+
+# OS / editor noise
+.DS_Store
+*.log
+*.class
+*.pyc
+*.swp
+.idea/
+*.iml
+*.ipr
+*.iws
+.atom/
+.swiftpm/

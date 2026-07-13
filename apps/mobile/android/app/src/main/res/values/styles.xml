@@ -1,0 +1,16 @@
+<resources>
+    <!-- Tema aplicado ao Splash no Android 12+ -->
+    <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <!-- Fundo do splash: usa a tua imagem gradiente -->
+        <!-- Ícone animado do Android 12 (se não quiser mostrar, usa @null) -->
+        <!-- Configurações adicionais -->
+        <item name="android:forceDarkAllowed">false</item>
+        <item name="android:windowFullscreen">false</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">false</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+    </style>
+    <!-- Tema normal da app -->
+    <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <item name="android:windowBackground">?android:colorBackground</item>
+    </style>
+</resources>

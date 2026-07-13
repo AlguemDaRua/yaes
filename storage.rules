@@ -1,0 +1,57 @@
+rules_version = '2';
+
+// Cloud Storage security rules for the YA platform (project ya-app-z).
+// Default-deny. Writes are limited to the resource owner and validated for
+// size and content-type. Reads require an authenticated user.
+//
+// Note: admin/support role-scoped reads cannot be expressed here because roles
+// live in Realtime Database (Storage rules cannot read RTDB). Tighter,
+// role-aware access is deferred to custom auth claims in the store-launch phase.
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isValidUpload() {
+      return request.resource.size < 10 * 1024 * 1024 &&
+        (request.resource.contentType.matches('image/.*') ||
+          request.resource.contentType == 'application/pdf');
+    }
+
+    // Profile photos — owner writes; any signed-in user can view (shown to the
+    // other party during a trip).
+    match /users/{uid}/{allPaths=**} {
+      allow read: if isSignedIn();
+      allow write: if isOwner(uid) && isValidUpload();
+    }
+
+    // Driver documents — the driver uploads their own; signed-in reviewers read.
+    match /drivers/{uid}/documents/{allPaths=**} {
+      allow read: if isSignedIn();
+      allow write: if isOwner(uid) && isValidUpload();
+    }
+
+    // Backoffice document uploads keyed by owner (partner/admin/support).
+    match /documents/{ownerType}/{ownerId}/{allPaths=**} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && isValidUpload();
+    }
+
+    // Trip chat attachments.
+    match /chat/{tripId}/{allPaths=**} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && isValidUpload();
+    }
+
+    // Deny everything else.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

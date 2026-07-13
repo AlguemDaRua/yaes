@@ -1,0 +1,16 @@
+{
+  "projects": {
+    "ya-app": "ya-app-z",
+    "default": "ya-app-z"
+  },
+  "targets": {
+    "ya-app-z": {
+      "database": {
+        "prod": [
+          "ya-app-z-default-rtdb"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}

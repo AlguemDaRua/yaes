@@ -1,0 +1,17 @@
+final List<String> languages = [
+  'Português',
+  'Inglês',
+  'Espanhol',
+  'Francês',
+  'Alemão',
+  'Italiano',
+  'Chinês (Simplificado)',
+  'Japonês',
+  'Coreano',
+  'Árabe',
+  'Russo',
+  'Hindi',
+  'Turco',
+  'Holandês',
+  'Sueco',
+];
