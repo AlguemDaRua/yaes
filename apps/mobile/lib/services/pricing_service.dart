@@ -149,35 +149,57 @@ class CarCategory {
 }
 
 /// Fallback quando /config/pricing/categories não existe ou está inacessível.
-/// Espelha a operação real (Nampula): só moto + económico. Outras categorias
-/// (sedan, SUV, …) só aparecem se a operação as activar no painel — o config
-/// é a fonte da verdade, nunca este fallback.
+/// Catálogo e ordem de apresentação. Tarifas e lotação vêm da configuração
+/// remota quando disponíveis; categorias ausentes usam estes valores.
 const List<CarCategory> kDefaultCategories = [
-  // multiplier deriva do preço real da gasolina (93,86 MT/L, jun/2026): ~15 MT
-  // bandeirada + ~7,5 MT/km sobre a tarifa regular (150 base + 35/km) = 0,214x
-  // — ver Downloads/YA-Plano-Fecho.md B2.3.
   CarCategory(
-    id: 'moto',
-    label: 'Moto',
-    multiplier: 0.214,
-    seats: 1,
+    id: 'economico',
+    label: 'Económico',
+    multiplier: 1.0,
+    seats: 5,
     order: 0,
+  ),
+  CarCategory(
+    id: 'confort',
+    label: 'Confort',
+    multiplier: 1.35,
+    seats: 5,
+    order: 1,
   ),
   CarCategory(
     id: 'txopela',
     label: 'Txopela',
     multiplier: 0.7,
     seats: 3,
-    order: 1,
-  ),
-  CarCategory(
-    id: 'economico',
-    label: 'Económico',
-    multiplier: 1.0,
-    seats: 5,
     order: 2,
   ),
+  CarCategory(id: 'moto', label: 'Moto', multiplier: 0.214, seats: 1, order: 3),
 ];
+
+/// Mantém os quatro tipos actuais, os nomes e a ordem combinados pela equipa.
+/// Nunca substitui uma tarifa válida configurada pela operação.
+List<CarCategory> parseCarCategories(Object? value) {
+  final config = value is Map ? value : const {};
+  final categories = kDefaultCategories.map((fallback) {
+    final raw = config[fallback.id];
+    final fields = raw is Map ? raw : const {};
+    final multiplier = fields['multiplier'];
+    final seats = fields['seats'];
+    return CarCategory(
+      id: fallback.id,
+      label: fallback.label,
+      multiplier: multiplier is num && multiplier.isFinite && multiplier > 0
+          ? multiplier.toDouble()
+          : fallback.multiplier,
+      seats: seats is num && seats.isFinite && seats >= 1
+          ? seats.toInt()
+          : fallback.seats,
+      order: fallback.order,
+    );
+  }).toList();
+  categories.sort((a, b) => a.order.compareTo(b.order));
+  return categories;
+}
 
 class PricingService {
   static final _functions = FirebaseFunctions.instance;
@@ -199,31 +221,14 @@ class PricingService {
       final snap = await FirebaseDatabase.instance
           .ref('config/pricing/categories')
           .get();
-      final value = snap.value;
-      if (value is Map && value.isNotEmpty) {
-        final categories = <CarCategory>[];
-        value.forEach((key, raw) {
-          if (raw is! Map) return;
-          final m = raw['multiplier'];
-          categories.add(
-            CarCategory(
-              id: key.toString(),
-              label: (raw['label'] ?? key).toString(),
-              multiplier: m is num && m > 0 ? m.toDouble() : 1.0,
-              seats: raw['seats'] is num ? (raw['seats'] as num).toInt() : 4,
-              order: raw['order'] is num ? (raw['order'] as num).toInt() : 99,
-            ),
-          );
-        });
-        categories.sort((a, b) => a.order.compareTo(b.order));
-        _cachedCategories = categories;
-        _categoriesFetchedAt = DateTime.now();
-        return categories;
-      }
+      final categories = parseCarCategories(snap.value);
+      _cachedCategories = categories;
+      _categoriesFetchedAt = DateTime.now();
+      return categories;
     } catch (_) {
       // unreachable → fallback below
     }
-    return kDefaultCategories;
+    return parseCarCategories(null);
   }
 
   /// Multiplier for a category id, using the cache/defaults (no await needed
