@@ -511,21 +511,28 @@ class _PassengerHomePageState extends State<PassengerHomePage>
             if (
             // !appState.showRoute &&
             appState.selectedCarType.isEmpty && !appState.isPaymentSelected)
-              Positioned(
+              Positioned.fill(
                 child: Align(
-                  alignment: AlignmentGeometry.bottomCenter,
-                  child: CarTypeSelector(
-                    onRouteChanged: _routeController.calculateRoute,
-                    onStopRequested: () => _searchStop(context),
-                    onAnimateSheet: (size) {
-                      if (_sheetController.isAttached) {
-                        _sheetController.animateTo(
-                          size,
-                          duration: const Duration(seconds: 1),
-                          curve: Curves.easeInOut,
-                        );
-                      }
-                    },
+                  alignment: Alignment.bottomCenter,
+                  child: SafeArea(
+                    top: true,
+                    bottom: false,
+                    child: Padding(
+                      padding: EdgeInsets.only(top: 12.sp),
+                      child: CarTypeSelector(
+                        onRouteChanged: _routeController.calculateRoute,
+                        onStopRequested: () => _searchStop(context),
+                        onAnimateSheet: (size) {
+                          if (_sheetController.isAttached) {
+                            _sheetController.animateTo(
+                              size,
+                              duration: const Duration(seconds: 1),
+                              curve: Curves.easeInOut,
+                            );
+                          }
+                        },
+                      ),
+                    ),
                   ),
                 ),
               ),

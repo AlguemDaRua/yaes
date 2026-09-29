@@ -54,7 +54,7 @@ class LocationInputs extends StatelessWidget {
                       onRouteChanged();
                     },
                     child: Container(
-                      margin: EdgeInsets.only(right: 10.sp),
+                      margin: EdgeInsets.only(right: 18.sp),
                       height: 30.sp,
                       decoration: BoxDecoration(
                         color: Colors.grey.withAlpha(40),
@@ -116,7 +116,7 @@ class LocationInputs extends StatelessWidget {
                   child: Stack(
                     children: [
                       Container(
-                        margin: EdgeInsets.only(right: 10.sp),
+                        margin: EdgeInsets.only(right: 18.sp),
                         height: 30.sp,
                         decoration: BoxDecoration(
                           color: Colors.grey.withAlpha(40),
@@ -127,7 +127,7 @@ class LocationInputs extends StatelessWidget {
                       if (appState.stops.isNotEmpty)
                         Positioned(
                           top: 2.sp,
-                          right: 15.sp,
+                          right: 23.sp,
                           child: Text(
                             appState.stops.length.toString(),
                             style: TextStyle(
@@ -157,7 +157,7 @@ class LocationInputs extends StatelessWidget {
                     onRouteChanged();
                   },
                   child: Container(
-                    margin: EdgeInsets.only(right: 10.sp),
+                    margin: EdgeInsets.only(right: 18.sp),
                     height: 30.sp,
                     decoration: BoxDecoration(
                       color: Colors.grey.withAlpha(40),

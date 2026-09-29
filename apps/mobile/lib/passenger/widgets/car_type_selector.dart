@@ -54,11 +54,13 @@ class CarTypeSelector extends StatelessWidget {
             ConstrainedBox(
               constraints: BoxConstraints(
                 maxHeight:
-                    MediaQuery.of(context).size.height * 0.9 -
-                    MediaQuery.of(context).padding.top,
+                    MediaQuery.of(context).size.height * 0.85 -
+                    MediaQuery.of(context).padding.top -
+                    16.sp,
                 minHeight:
-                    MediaQuery.of(context).size.height * 0.9 -
-                    MediaQuery.of(context).padding.top,
+                    MediaQuery.of(context).size.height * 0.85 -
+                    MediaQuery.of(context).padding.top -
+                    16.sp,
               ),
               child: LocationSearchSheet(
                 onRouteChanged: onRouteChanged,
