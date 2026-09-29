@@ -373,6 +373,11 @@ class PassengerState extends ChangeNotifier {
           _paymentMethod = '';
           _isSearching = false;
           _stopListeningToDriver();
+
+          // Limpa as paragens automaticamente se a viagem foi finalizada com sucesso
+          if (_tripStatus == 'completed') {
+            clearStops();
+          }
         } else if (_tripStatus == 'accepted' || _tripStatus == 'started') {
           final driverUid = trip['driver']?.toString();
           if (driverUid != null) {

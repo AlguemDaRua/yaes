@@ -7,6 +7,7 @@ import 'package:limousineexecutive/repositories/auth_repository.dart';
 import 'package:limousineexecutive/repositories/trip_repository.dart';
 import 'package:limousineexecutive/utils/secure_storage.dart';
 import 'package:provider/provider.dart';
+import 'package:limousineexecutive/passenger/models/passenger_state.dart';
 import '../components/bottomsheet/modal_trip_history.dart';
 
 class PassengerMenuPage extends StatefulWidget {
@@ -164,6 +165,11 @@ class _MenuState extends State<PassengerMenuPage> {
     if (!mounted) return;
 
     final authRepo = Provider.of<IAuthRepository>(context, listen: false);
+    final appState = Provider.of<PassengerState>(context, listen: false);
+
+    // Limpa a memoria da sessao actual (paragens) para não passar para a proxima conta
+    appState.clearStops();
+
     await authRepo.signOut();
     Preferences.removeNumber();
     Preferences.removeType();
