@@ -13,6 +13,9 @@ analyzer:
     - "**/*.g.dart"
     - "**/*.freezed.dart"
     - "lib/data/seed/**"
+    - build/**
+    - web/**
+    - windows/**
 
 linter:
   rules:
