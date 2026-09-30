@@ -595,8 +595,12 @@ class PassengerState extends ChangeNotifier {
 
   // Add a new stop to the list
   void addStop(Map<String, dynamic> stop) {
-    _stops.add(stop);
-    notifyListeners();
+    // Avoid adding duplicate stops
+    final bool alreadyExists = _stops.any((s) => s['name'] == stop['name'] || s['latlong'] == stop['latlong']);
+    if (!alreadyExists) {
+      _stops.add(stop);
+      notifyListeners();
+    }
   }
 
   // Insert a new stop at a specific index

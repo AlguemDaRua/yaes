@@ -199,6 +199,8 @@ class _SearchModalState extends State<SearchModal> {
       padding: EdgeInsets.symmetric(horizontal: 4.sp, vertical: 6.sp),
       children: List.generate(appState.address.length, (index) {
         final addr = appState.address[index];
+        final bool isAlreadySelected = appState.stops.any((s) => s['name'] == addr['name'] || s['latlong'] == addr['latlong']);
+        
         return Container(
           margin: EdgeInsets.symmetric(horizontal: 14.sp, vertical: 4.sp),
           decoration: BoxDecoration(
@@ -258,12 +260,21 @@ class _SearchModalState extends State<SearchModal> {
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
-            onTap: () {
-              setState(() {
-                _stop = addr;
-                Navigator.pop(context, _stop);
-              });
-            },
+            trailing: isAlreadySelected
+                ? Icon(
+                    Icons.check_circle_rounded,
+                    color: const Color(0xffe5a400),
+                    size: 24.sp,
+                  )
+                : null,
+            onTap: isAlreadySelected
+                ? null
+                : () {
+                    setState(() {
+                      _stop = addr;
+                      Navigator.pop(context, _stop);
+                    });
+                  },
           ),
         );
       }),
@@ -380,7 +391,7 @@ class _SearchModalState extends State<SearchModal> {
           children: [
             for (int i = 0; i < appState.stops.length; i++)
               Container(
-                key: ValueKey(appState.stops[i]['name']),
+                key: ValueKey('${appState.stops[i]['name']}_$i'),
                 margin: EdgeInsets.symmetric(horizontal: 18.sp, vertical: 4.sp),
                 decoration: BoxDecoration(
                   color: Colors.white,
