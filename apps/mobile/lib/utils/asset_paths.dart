@@ -47,6 +47,10 @@ class AssetPaths {
   static const String vitz = BaseImageUrl2 + 'vitz.png';
   static const String demio = BaseImageUrl2 + 'demio.png';
   static const String fit = BaseImageUrl2 + 'fit.png';
+  
+  // MOTA & TXOPELA
+  static const String mota = BaseImageUrl2 + 'mota.png';
+  static const String txopela = BaseImageUrl2 + 'txopela.png';
 
   //SEDAN
   static const String sedan = BaseImageUrl2 + 'sedan.png';

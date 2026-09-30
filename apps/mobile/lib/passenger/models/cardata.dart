@@ -42,6 +42,9 @@ class CarData {
   /// (ex.: moto) usam [categoryIcon] no seletor.
   static const Map<String, String> categoryImages = {
     'economico': AssetPaths.vitz,
+    'confort': AssetPaths.prado,
+    'txopela': AssetPaths.txopela,
+    'moto': AssetPaths.mota,
     'sedan': AssetPaths.sedan,
     'caravan': AssetPaths.caravan,
     'suv': AssetPaths.prado,
