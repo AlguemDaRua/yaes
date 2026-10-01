@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:limousineexecutive/passenger/models/passenger_state.dart';
 import 'package:limousineexecutive/passenger/pages/pick_location_on_map.dart';
 import 'package:limousineexecutive/services/location_service.dart';
+import 'package:limousineexecutive/passenger/components/location_suggestion_card.dart';
 import 'package:provider/provider.dart';
 
 class SearchModal extends StatefulWidget {
@@ -201,81 +202,25 @@ class _SearchModalState extends State<SearchModal> {
         final addr = appState.address[index];
         final bool isAlreadySelected = appState.stops.any((s) => s['name'] == addr['name'] || s['latlong'] == addr['latlong']);
         
-        return Container(
-          margin: EdgeInsets.symmetric(horizontal: 14.sp, vertical: 4.sp),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: const Color(0xffe5a400).withAlpha(40),
-              width: 1,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withAlpha(5),
-                blurRadius: 6,
-                offset: const Offset(0, 3),
-              ),
-            ],
-          ),
-          child: ListTile(
-            contentPadding: EdgeInsets.symmetric(
-              horizontal: 14.sp,
-              vertical: 4.sp,
-            ),
-            leading: Container(
-              width: 40.sp,
-              height: 40.sp,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withAlpha(8),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Icon(
-                LocationService.iconForPlace(addr["type"]),
-                color: const Color(0xffe5a400),
-                size: 18.sp,
-              ),
-            ),
-            title: Text(
-              addr["name"] as String,
-              style: GoogleFonts.poppins(
-                fontWeight: FontWeight.w600,
-                fontSize: 14.sp,
-                color: Colors.black87,
-              ),
-            ),
-            subtitle: Text(
-              addr["fullName"] as String,
-              style: GoogleFonts.poppins(
-                fontSize: 11.sp,
-                color: Colors.grey.shade500,
-              ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-            trailing: isAlreadySelected
-                ? Icon(
-                    Icons.check_circle_rounded,
-                    color: const Color(0xffe5a400),
-                    size: 24.sp,
-                  )
-                : null,
-            onTap: isAlreadySelected
-                ? null
-                : () {
-                    setState(() {
-                      _stop = addr;
-                      Navigator.pop(context, _stop);
-                    });
-                  },
-          ),
+        return LocationSuggestionCard(
+          title: addr["name"] as String,
+          subtitle: addr["fullName"] as String,
+          iconData: LocationService.iconForPlace(addr["type"]),
+          trailing: isAlreadySelected
+              ? Icon(
+                  Icons.check_circle_rounded,
+                  color: const Color(0xffe5a400),
+                  size: 24.sp,
+                )
+              : null,
+          onTap: isAlreadySelected
+              ? null
+              : () {
+                  setState(() {
+                    _stop = addr;
+                    Navigator.pop(context, _stop);
+                  });
+                },
         );
       }),
     );
