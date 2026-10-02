@@ -20,6 +20,8 @@ import 'package:limousineexecutive/utils/app_config.dart';
 import 'package:limousineexecutive/passenger/components/bottomsheet/modal_stops.dart';
 import 'package:limousineexecutive/utils/asset_paths.dart';
 import 'package:limousineexecutive/passenger/components/map_util/pointer_destination.dart';
+import 'package:limousineexecutive/passenger/components/map_util/stop_marker.dart';
+import 'package:limousineexecutive/passenger/components/map_util/map_legend.dart';
 import 'package:limousineexecutive/utils/blink_widget.dart';
 import 'package:limousineexecutive/passenger/controllers/location_controller.dart';
 import 'package:limousineexecutive/passenger/controllers/route_controller.dart';
@@ -296,27 +298,10 @@ class _PassengerHomePageState extends State<PassengerHomePage>
                       ...List.generate(appState.stops.length, (i) {
                         return Marker(
                           alignment: Alignment.center,
-                          width: 32.sp,
-                          height: 32.sp,
+                          width: 44,
+                          height: 44,
                           point: appState.stops[i]['latlong'],
-                          child: Container(
-                            decoration: const BoxDecoration(
-                              color: Colors.white,
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black12,
-                                  blurRadius: 6,
-                                  offset: Offset(0, 3),
-                                ),
-                              ],
-                            ),
-                            padding: EdgeInsets.all(8.sp),
-                            child: Image.asset(
-                              AssetPaths.stopSign,
-                              color: Colors.black,
-                            ),
-                          ),
+                          child: StopMarker(number: i + 1),
                         );
                       }),
 
@@ -473,6 +458,13 @@ class _PassengerHomePageState extends State<PassengerHomePage>
                 ),
               ),
             ),
+
+            if (appState.showRoute)
+              Positioned(
+                top: MediaQuery.of(context).padding.top + 70.sp,
+                right: 18.sp,
+                child: const MapLegendButton(),
+              ),
 
             /// SWAP ROUTES BUTTON (when car type is selected)
             if ((!appState.focusNodePickup.hasFocus &&
