@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:limousineexecutive/passenger/pages/pick_location_on_map.dart';
+import 'package:limousineexecutive/passenger/components/bottomsheet/modal_search_place.dart';
+import 'package:limousineexecutive/passenger/components/dialogs/place_name_dialog.dart';
+import 'package:limousineexecutive/passenger/models/saved_place.dart';
 import 'package:limousineexecutive/repositories/auth_repository.dart';
 import 'package:limousineexecutive/repositories/trip_repository.dart';
 import 'package:provider/provider.dart';
@@ -29,15 +31,22 @@ class _LocationsPageState extends State<LocationsPage> {
   }
 
   Future<void> _pickAndSave(String label, {String? otherKey}) async {
-    final result = await Navigator.push<Map<String, dynamic>>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => PickLocationOnMap(text: label, returnResult: true),
-      ),
-    );
+    final result = await showSearchPlaceModal(context, title: label);
     if (result == null || _uid.isEmpty) return;
     final key = otherKey ?? DateTime.now().millisecondsSinceEpoch.toString();
-    await _tripRepo.updateProfile(_uid, {'savedLocations/$key': result});
+    // Casa e Trabalho têm nome fixo; um novo local guarda o nome escolhido.
+    final place = SavedPlace.toStored(
+      result,
+      label: otherKey == null ? label : null,
+    );
+    await _tripRepo.updateProfile(_uid, {'savedLocations/$key': place});
+  }
+
+  /// Novo local: primeiro o nome (livre), depois o local.
+  Future<void> _addOther() async {
+    final label = await showPlaceNameDialog(context);
+    if (label == null || !mounted) return;
+    await _pickAndSave(label);
   }
 
   Future<void> _removeOther(String key) async {
@@ -64,7 +73,7 @@ class _LocationsPageState extends State<LocationsPage> {
           final Map saved = (snapshot.data?['savedLocations'] as Map?) ?? {};
           final home = saved['home'] as Map?;
           final work = saved['work'] as Map?;
-          final others = saved.entries.where((e) => e.key != 'home' && e.key != 'work').toList();
+          final others = SavedPlace.parseAll(saved).where((p) => p.kind == SavedPlaceKind.other).toList();
 
           return SingleChildScrollView(
             padding: EdgeInsets.all(20.sp),
@@ -115,12 +124,12 @@ class _LocationsPageState extends State<LocationsPage> {
                           if (i > 0) _buildDivider(),
                           _buildLocationItem(
                             icon: Icons.place_outlined,
-                            title: (others[i].value as Map)['name']?.toString() ?? 'Local',
-                            subtitle: (others[i].value as Map)['fullName']?.toString() ?? '',
+                            title: others[i].title,
+                            subtitle: others[i].fullName,
                             color: Colors.teal,
                             trailing: IconButton(
                               icon: Icon(Icons.close, size: 18.sp, color: Colors.grey.shade400),
-                              onPressed: () => _removeOther(others[i].key.toString()),
+                              onPressed: () => _removeOther(others[i].id),
                             ),
                           ),
                         ],
@@ -130,7 +139,7 @@ class _LocationsPageState extends State<LocationsPage> {
                 SizedBox(height: 12.sp),
                 InkWell(
                   borderRadius: BorderRadius.circular(20),
-                  onTap: () => _pickAndSave('Novo local'),
+                  onTap: _addOther,
                   child: Container(
                     padding: EdgeInsets.all(20.sp),
                     decoration: BoxDecoration(

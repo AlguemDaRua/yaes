@@ -20,6 +20,7 @@ import 'package:limousineexecutive/driver/pages/my_gain.dart';
 import 'package:limousineexecutive/driver/pages/my_rides.dart';
 import 'package:limousineexecutive/driver/pages/ratings_page.dart';
 import 'package:limousineexecutive/passenger/models/passenger_state.dart';
+import 'package:limousineexecutive/passenger/models/saved_places_state.dart';
 import 'package:limousineexecutive/passenger/pages/splash_page.dart';
 import 'package:limousineexecutive/repositories/auth_repository.dart';
 import 'package:limousineexecutive/repositories/firebase_auth_repository.dart';
@@ -234,6 +235,14 @@ void main() async {
             ),
             ChangeNotifierProvider(
               create: (context) => PassengerState(
+                repository: Provider.of<ITripRepository>(context, listen: false),
+                auth: Provider.of<IAuthRepository>(context, listen: false),
+              ),
+            ),
+            // lazy: false: carrega logo, antes de tocarem em "Para".
+            ChangeNotifierProvider(
+              lazy: false,
+              create: (context) => SavedPlacesState(
                 repository: Provider.of<ITripRepository>(context, listen: false),
                 auth: Provider.of<IAuthRepository>(context, listen: false),
               ),
