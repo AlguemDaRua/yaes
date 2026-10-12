@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:limousineexecutive/passenger/pages/place_search_page.dart';
+import 'package:limousineexecutive/passenger/components/bottomsheet/modal_search_place.dart';
 import 'package:limousineexecutive/repositories/auth_repository.dart';
 import 'package:limousineexecutive/repositories/trip_repository.dart';
 import 'package:provider/provider.dart';
@@ -29,12 +29,7 @@ class _LocationsPageState extends State<LocationsPage> {
   }
 
   Future<void> _pickAndSave(String label, {String? otherKey}) async {
-    final result = await Navigator.push<Map<String, dynamic>>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => PlaceSearchPage(title: label),
-      ),
-    );
+    final result = await showSearchPlaceModal(context, title: label);
     if (result == null || _uid.isEmpty) return;
     final key = otherKey ?? DateTime.now().millisecondsSinceEpoch.toString();
     await _tripRepo.updateProfile(_uid, {'savedLocations/$key': result});
