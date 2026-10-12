@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:limousineexecutive/passenger/pages/pick_location_on_map.dart';
+import 'package:limousineexecutive/passenger/pages/place_search_page.dart';
 import 'package:limousineexecutive/repositories/auth_repository.dart';
 import 'package:limousineexecutive/repositories/trip_repository.dart';
 import 'package:provider/provider.dart';
@@ -32,7 +32,7 @@ class _LocationsPageState extends State<LocationsPage> {
     final result = await Navigator.push<Map<String, dynamic>>(
       context,
       MaterialPageRoute(
-        builder: (_) => PickLocationOnMap(text: label, returnResult: true),
+        builder: (_) => PlaceSearchPage(title: label),
       ),
     );
     if (result == null || _uid.isEmpty) return;
