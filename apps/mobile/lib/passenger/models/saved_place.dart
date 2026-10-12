@@ -47,6 +47,20 @@ class SavedPlace {
     };
   }
 
+  /// Tamanho máximo do nome que o utilizador escolhe para uma morada.
+  static const maxLabelLength = 30;
+
+  /// O que se guarda em `savedLocations/<chave>`: o local escolhido
+  /// (`{name, fullName, lat, lng}`) e, se houver, o nome que o utilizador lhe
+  /// deu (`label`, sem espaços nas pontas). É o inverso de [parseAll].
+  static Map<String, dynamic> toStored(
+    Map<String, dynamic> place, {
+    String? label,
+  }) {
+    final chosen = _text(label);
+    return {...place, if (chosen != null) 'label': chosen};
+  }
+
   /// Lê o nó `savedLocations`. É tolerante: ignora entradas inválidas em vez de
   /// falhar. Ordem: Casa, Trabalho e depois as outras, da mais antiga (chave
   /// = hora de criação) para a mais nova.

@@ -177,4 +177,85 @@ void main() {
       expect(a == b, isFalse);
     });
   });
+
+  group('SavedPlace.toStored', () {
+    // O que o seletor devolve: {name, fullName, lat, lng}.
+    Map<String, dynamic> picked() => {
+      'name': 'Igreja Católica de Nacuto',
+      'fullName': 'Igreja Católica de Nacuto, Nampula',
+      'lat': -15.1165,
+      'lng': 39.2666,
+    };
+
+    test('keeps the chosen place and adds the label', () {
+      expect(SavedPlace.toStored(picked(), label: 'Igreja'), {
+        ...picked(),
+        'label': 'Igreja',
+      });
+    });
+
+    test('trims the label', () {
+      final stored = SavedPlace.toStored(picked(), label: '  Escola  ');
+
+      expect(stored['label'], 'Escola');
+    });
+
+    test('does not add an empty label', () {
+      expect(SavedPlace.toStored(picked()), picked());
+      expect(SavedPlace.toStored(picked(), label: ''), picked());
+      expect(SavedPlace.toStored(picked(), label: '   '), picked());
+    });
+
+    test('does not change the place it receives', () {
+      final place = picked();
+
+      SavedPlace.toStored(place, label: 'Igreja');
+
+      expect(place, picked());
+    });
+
+    test('is read back by parseAll with the label as the title', () {
+      final places = SavedPlace.parseAll({
+        '1700000001000': SavedPlace.toStored(
+          picked(),
+          label: 'Ginásio da Maria',
+        ),
+      });
+
+      expect(places.single.title, 'Ginásio da Maria');
+      expect(places.single.label, 'Ginásio da Maria');
+      expect(places.single.name, 'Igreja Católica de Nacuto');
+    });
+
+    test('accepts any name, not only a fixed list', () {
+      const names = [
+        'Igreja',
+        'Escola',
+        'Ginásio',
+        'Casa da avó',
+        'Café & Pão',
+      ];
+
+      for (final name in names) {
+        final places = SavedPlace.parseAll({
+          '1700000001000': SavedPlace.toStored(picked(), label: name),
+        });
+
+        expect(places.single.title, name);
+      }
+    });
+
+    test('a place stored without a label keeps the geocoded name', () {
+      final places = SavedPlace.parseAll({
+        '1700000001000': SavedPlace.toStored(picked()),
+      });
+
+      expect(places.single.label, isNull);
+      expect(places.single.title, 'Igreja Católica de Nacuto');
+    });
+
+    test('the label can have up to 30 characters', () {
+      expect(SavedPlace.maxLabelLength, 30);
+    });
+  });
 }
