@@ -372,7 +372,8 @@ class _DriverHomePageState extends State<DriverHomePage>
                         appState.destinationLocation != null)
                       Marker(
                         alignment: Alignment.topCenter,
-                        width: 120.sp,
+                        width: 160.sp,
+                        height: 52.sp,
                         point: appState.destinationLocation!,
                         child: buildDestinationMarker(minutes: 18),
                       ),
@@ -383,7 +384,8 @@ class _DriverHomePageState extends State<DriverHomePage>
                         appState.originLocation != null)
                       Marker(
                         alignment: Alignment.topCenter,
-                        width: 120.sp,
+                        width: 160.sp,
+                        height: 52.sp,
                         point: appState.originLocation!,
                         child: buildDestinationMarker(minutes: 10),
                       ),

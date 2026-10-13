@@ -23,10 +23,11 @@ class LocationSearchSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final appState = Provider.of<PassengerState>(context);
-    // As moradas guardadas aparecem primeiro, só ao escolher o destino.
-    final savedPlaces = appState.showDestinationOptions
-        ? Provider.of<SavedPlacesState>(context).places
-        : const <SavedPlace>[];
+    // As moradas guardadas aparecem tanto na recolha como no destino.
+    final savedPlaces =
+        (appState.showDestinationOptions || appState.showPickupOptions)
+            ? Provider.of<SavedPlacesState>(context).places
+            : const <SavedPlace>[];
     return ListView(
       padding: EdgeInsets.zero,
       shrinkWrap: true,

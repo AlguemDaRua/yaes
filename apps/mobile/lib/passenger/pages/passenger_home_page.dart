@@ -334,8 +334,8 @@ class _PassengerHomePageState extends State<PassengerHomePage>
                         appState.originLocation != null)
                       Marker(
                         alignment: Alignment.topCenter,
-                        width: 120.sp,
-                        height: 26.sp,
+                        width: 160.sp,
+                        height: 52.sp,
                         point: appState.destinationLocation!,
                         child: buildDestinationMarker(
                           minutes:

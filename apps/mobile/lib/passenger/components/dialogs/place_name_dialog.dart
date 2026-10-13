@@ -15,7 +15,7 @@ Future<String?> showPlaceNameDialog(BuildContext context) {
 }
 
 class _PlaceNameDialog extends StatefulWidget {
-  const _PlaceNameDialog({super.key});
+  const _PlaceNameDialog();
 
   @override
   State<_PlaceNameDialog> createState() => _PlaceNameDialogState();
