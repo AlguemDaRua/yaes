@@ -18,6 +18,7 @@ import 'package:limousineexecutive/driver/models/driver_state.dart';
 import 'package:limousineexecutive/passenger/components/map_util/pointer_destination.dart';
 import 'package:limousineexecutive/services/location_service.dart';
 import 'package:limousineexecutive/services/messaging_service.dart';
+import 'package:limousineexecutive/shared/widgets/map_compass_button.dart';
 import 'package:limousineexecutive/utils/app_config.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
@@ -305,10 +306,8 @@ class _DriverHomePageState extends State<DriverHomePage>
                 maxZoom: 18, // maximum zoom in limit
                 initialRotation: 0,
                 interactionOptions: const InteractionOptions(
-                  flags:
-                      InteractiveFlag.pinchZoom | // simple zoom
-                      InteractiveFlag.drag | // map pan
-                      InteractiveFlag.doubleTapZoom, // double tap zoom
+                  // Permite gestos completos no mapa (arrasto, zoom e rotação) para suporte à bússola
+                  flags: InteractiveFlag.all,
                 ),
               ),
               children: [
@@ -394,43 +393,50 @@ class _DriverHomePageState extends State<DriverHomePage>
               ],
             ),
 
-            // Zoom buttons centered on the right side
+            // Controlos do mapa (Bússola + Botões de Zoom) centralizados à direita
             Align(
               alignment: Alignment.centerRight,
               child: Padding(
                 padding: EdgeInsets.only(right: 15.sp, bottom: 50.sp),
-                child: ZoomButtons(
-                  onZoomIn: () {
-                    final currentZoom =
-                        _animatedMapController.mapController.camera.zoom;
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    MapCompassButton(
+                      animatedMapController: _animatedMapController,
+                      size: 48.sp,
+                    ),
+                    SizedBox(height: 14.sp),
+                    ZoomButtons(
+                      onZoomIn: () {
+                        final currentZoom =
+                            _animatedMapController.mapController.camera.zoom;
 
-                    if (currentZoom <= 17.5) {
-                      _animatedMapController.animateTo(
-                        dest:
-                            _animatedMapController.mapController.camera.center,
-                        zoom: currentZoom + 0.5, // increase zoom
-                        duration: const Duration(milliseconds: 400),
-                        curve: Curves.easeInOut,
-                      );
-                      // zoom in logic
-                    }
-                  },
-                  onZoomOut: () {
-                    final currentZoom =
-                        _animatedMapController.mapController.camera.zoom;
+                        if (currentZoom <= 17.5) {
+                          _animatedMapController.animateTo(
+                            dest: _animatedMapController
+                                .mapController.camera.center,
+                            zoom: currentZoom + 0.5,
+                            duration: const Duration(milliseconds: 400),
+                            curve: Curves.easeInOut,
+                          );
+                        }
+                      },
+                      onZoomOut: () {
+                        final currentZoom =
+                            _animatedMapController.mapController.camera.zoom;
 
-                    if (currentZoom >= 12.5) {
-                      _animatedMapController.animateTo(
-                        dest:
-                            _animatedMapController.mapController.camera.center,
-                        zoom: currentZoom - 0.5, // decrease zoom
-                        duration: const Duration(milliseconds: 400),
-                        curve: Curves.easeInOut,
-                      );
-                    }
-
-                    // zoom out logic
-                  },
+                        if (currentZoom >= 12.5) {
+                          _animatedMapController.animateTo(
+                            dest: _animatedMapController
+                                .mapController.camera.center,
+                            zoom: currentZoom - 0.5,
+                            duration: const Duration(milliseconds: 400),
+                            curve: Curves.easeInOut,
+                          );
+                        }
+                      },
+                    ),
+                  ],
                 ),
               ),
             ),

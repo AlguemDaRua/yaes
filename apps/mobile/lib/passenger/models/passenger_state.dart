@@ -150,6 +150,11 @@ class PassengerState extends ChangeNotifier {
   LatLng? get currentLocation => _currentLocation;
   LatLng? get destinationLocation => _destinationLocation;
   LatLng? get originLocation => _originLocation;
+
+  /// Indica se a viagem tem tanto ponto de recolha (origem) quanto destino definidos.
+  bool get hasTripLocations =>
+      _originLocation != null && _destinationLocation != null;
+
   String get fromAddress => _fromAddress;
   String get toAddress => _toAddress;
   String get selectedCar => _selectedCar;
@@ -201,11 +206,23 @@ class PassengerState extends ChangeNotifier {
 
   set destinationLocation(LatLng? location) {
     _destinationLocation = location;
+    // Ao editar ou remover o destino sem uma rota completa, limpa a seleção de veículo
+    if (!hasTripLocations) {
+      _selectedCarType = '';
+      _selectedCategoryId = null;
+      _selectedCarTypeindex = null;
+    }
     notifyListeners();
   }
 
   set originLocation(LatLng? location) {
     _originLocation = location;
+    // Ao editar ou remover a origem sem uma rota completa, limpa a seleção de veículo
+    if (!hasTripLocations) {
+      _selectedCarType = '';
+      _selectedCategoryId = null;
+      _selectedCarTypeindex = null;
+    }
     notifyListeners();
   }
 
@@ -232,6 +249,8 @@ class PassengerState extends ChangeNotifier {
   /// Selecção vinda do seletor config-driven: guarda o id de pricing
   /// directamente (não depende do label, que vem de /config e pode variar).
   void selectCategory(String id, String label, int index) {
+    // Só permite escolher transporte se origem e destino estiverem definidos
+    if (!hasTripLocations) return;
     _selectedCategoryId = id;
     _selectedCarType = label;
     _selectedCarTypeindex = index;

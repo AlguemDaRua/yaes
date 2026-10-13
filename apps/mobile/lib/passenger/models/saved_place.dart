@@ -47,6 +47,15 @@ class SavedPlace {
     };
   }
 
+  /// Converte para o formato de local/paragem usado nas viagens:
+  /// `{name, fullName, type, latlong}`.
+  Map<String, dynamic> toPlaceMap() => {
+    'name': name,
+    'fullName': fullName,
+    'type': kind.name,
+    'latlong': location,
+  };
+
   /// Tamanho máximo do nome que o utilizador escolhe para uma morada.
   static const maxLabelLength = 30;
 
