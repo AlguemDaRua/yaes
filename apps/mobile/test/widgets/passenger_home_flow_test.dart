@@ -72,8 +72,8 @@ void main() {
                 color: const Color(0xFFE7ECE4),
                 child: Align(
                   alignment: Alignment.bottomCenter,
+                  // O seletor de tipo de carro obtém as categorias através do seu provider/serviço interno
                   child: CarTypeSelector(
-                    categories: Future.value(parseCarCategories(null)),
                     onRouteChanged: () {},
                     onStopRequested: () {},
                     onAnimateSheet: (_) {},

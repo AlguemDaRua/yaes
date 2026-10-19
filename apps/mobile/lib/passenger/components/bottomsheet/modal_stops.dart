@@ -5,7 +5,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:limousineexecutive/passenger/models/passenger_state.dart';
 import 'package:limousineexecutive/passenger/pages/pick_location_on_map.dart';
 import 'package:limousineexecutive/services/location_service.dart';
-import 'package:limousineexecutive/passenger/components/location_suggestion_card.dart';
+import 'package:limousineexecutive/passenger/components/saved_places_section.dart';
+import 'package:limousineexecutive/passenger/models/saved_places_state.dart';
 import 'package:provider/provider.dart';
 
 class SearchModal extends StatefulWidget {
@@ -192,37 +193,34 @@ class _SearchModalState extends State<SearchModal> {
     );
   }
 
-  ListView _listViewSuggestions() {
+  // Lista unificada que apresenta as moradas guardadas e as sugestões de locais,
+  // mantendo consistência visual e lógica com o seletor principal de recolha/destino.
+  Widget _listViewSuggestions() {
     final appState = Provider.of<PassengerState>(context);
-    return ListView(
-      // shrinkWrap: true; // importante se estiver dentro de outro scroll
-      scrollDirection: Axis.vertical,
+    final savedPlaces = Provider.of<SavedPlacesState>(context).places;
+
+    return LocationSuggestionsList(
       padding: EdgeInsets.symmetric(horizontal: 4.sp, vertical: 6.sp),
-      children: List.generate(appState.address.length, (index) {
-        final addr = appState.address[index];
-        final bool isAlreadySelected = appState.stops.any((s) => s['name'] == addr['name'] || s['latlong'] == addr['latlong']);
-        
-        return LocationSuggestionCard(
-          title: addr["name"] as String,
-          subtitle: addr["fullName"] as String,
-          iconData: LocationService.iconForPlace(addr["type"]),
-          trailing: isAlreadySelected
-              ? Icon(
-                  Icons.check_circle_rounded,
-                  color: const Color(0xffe5a400),
-                  size: 24.sp,
-                )
-              : null,
-          onTap: isAlreadySelected
-              ? null
-              : () {
-                  setState(() {
-                    _stop = addr;
-                    Navigator.pop(context, _stop);
-                  });
-                },
-        );
-      }),
+      savedPlaces: savedPlaces,
+      suggestions: appState.address,
+      isPlaceSelected: (place) => appState.stops.any(
+        (s) => s['name'] == place.name || s['latlong'] == place.location,
+      ),
+      isSuggestionSelected: (addr) => appState.stops.any(
+        (s) => s['name'] == addr['name'] || s['latlong'] == addr['latlong'],
+      ),
+      onSelectPlace: (place) {
+        setState(() {
+          _stop = place.toPlaceMap();
+          Navigator.pop(context, _stop);
+        });
+      },
+      onSelectSuggestion: (addr) {
+        setState(() {
+          _stop = addr;
+          Navigator.pop(context, _stop);
+        });
+      },
     );
   }
 

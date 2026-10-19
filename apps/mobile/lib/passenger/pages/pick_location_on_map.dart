@@ -1,12 +1,14 @@
 import 'package:easy_debounce/easy_debounce.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_map_animations/flutter_map_animations.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:limousineexecutive/services/location_service.dart';
 import 'package:limousineexecutive/utils/app_config.dart';
 import 'package:limousineexecutive/passenger/models/passenger_state.dart';
+import 'package:limousineexecutive/shared/widgets/map_compass_button.dart';
 import 'package:limousineexecutive/utils/asset_paths.dart';
 import 'package:provider/provider.dart';
 
@@ -21,9 +23,11 @@ class PickLocationOnMap extends StatefulWidget {
   State<PickLocationOnMap> createState() => _PickLocationOnMapState();
 }
 
+// TickerProviderStateMixin para suportar o controlador de pulso e o AnimatedMapController
 class _PickLocationOnMapState extends State<PickLocationOnMap>
-    with SingleTickerProviderStateMixin {
-  final MapController _mapController = MapController();
+    with TickerProviderStateMixin {
+  // Controlador animado para movimentação e reposicionamento a norte suave
+  late final AnimatedMapController _animatedMapController;
   String token = AppConfig.mapboxToken;
 
   Map<String, dynamic> _currentChoice = {};
@@ -36,6 +40,8 @@ class _PickLocationOnMapState extends State<PickLocationOnMap>
   void initState() {
     super.initState();
     final appState = Provider.of<PassengerState>(context, listen: false);
+
+    _animatedMapController = AnimatedMapController(vsync: this);
 
     _pulseController = AnimationController(
       vsync: this,
@@ -60,6 +66,7 @@ class _PickLocationOnMapState extends State<PickLocationOnMap>
 
   @override
   void dispose() {
+    _animatedMapController.dispose();
     _pulseController.dispose();
     super.dispose();
   }
@@ -161,7 +168,7 @@ class _PickLocationOnMapState extends State<PickLocationOnMap>
   // ── Map Widget ──
   Widget _buildMap() {
     return FlutterMap(
-      mapController: _mapController,
+      mapController: _animatedMapController.mapController,
       options: MapOptions(
         initialCenter: _center!,
         initialZoom: 15,
@@ -169,7 +176,10 @@ class _PickLocationOnMapState extends State<PickLocationOnMap>
           _getPlaceInfo(position.center);
         },
         onTap: (a, latLng) async {
-          _mapController.move(latLng, _mapController.camera.zoom);
+          _animatedMapController.animateTo(
+            dest: latLng,
+            zoom: _animatedMapController.mapController.camera.zoom,
+          );
           _getPlaceInfo(latLng);
         },
       ),
@@ -526,6 +536,15 @@ class _PickLocationOnMapState extends State<PickLocationOnMap>
                   _buildConfirmButton(),
                 ],
               ),
+            ),
+          ),
+
+          // Botão de bússola (renderizado no topo da Stack para nunca ser bloqueado pelo painel inferior)
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 60.sp,
+            right: 14.sp,
+            child: MapCompassButton(
+              animatedMapController: _animatedMapController,
             ),
           ),
         ],

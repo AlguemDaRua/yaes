@@ -26,6 +26,7 @@ import 'package:limousineexecutive/utils/blink_widget.dart';
 import 'package:limousineexecutive/passenger/controllers/location_controller.dart';
 import 'package:limousineexecutive/passenger/controllers/route_controller.dart';
 import 'package:limousineexecutive/driver/components/vehicle_marker.dart'; // Import the new widget
+import 'package:limousineexecutive/shared/widgets/map_compass_button.dart';
 import 'package:provider/provider.dart';
 
 class PassengerHomePage extends StatefulWidget {
@@ -183,10 +184,8 @@ class _PassengerHomePageState extends State<PassengerHomePage>
                 initialZoom: 14,
                 initialRotation: 0,
                 interactionOptions: const InteractionOptions(
-                  flags:
-                      InteractiveFlag.pinchZoom | // simple zoom
-                      InteractiveFlag.drag | // map pan
-                      InteractiveFlag.doubleTapZoom, // double tap zoom
+                  // Permite gestos completos no mapa (arrasto, zoom e rotação) para suporte à bússola
+                  flags: InteractiveFlag.all,
                 ),
               ),
               children: [
@@ -334,8 +333,8 @@ class _PassengerHomePageState extends State<PassengerHomePage>
                         appState.originLocation != null)
                       Marker(
                         alignment: Alignment.topCenter,
-                        width: 120.sp,
-                        height: 26.sp,
+                        width: 160.sp,
+                        height: 52.sp,
                         point: appState.destinationLocation!,
                         child: buildDestinationMarker(
                           minutes:
@@ -465,6 +464,18 @@ class _PassengerHomePageState extends State<PassengerHomePage>
                 right: 18.sp,
                 child: const MapLegendButton(),
               ),
+
+            /// COMPASS / NORTH BUTTON
+            AnimatedPositioned(
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeInOut,
+              top: MediaQuery.of(context).padding.top +
+                  (appState.showRoute ? 125.sp : 70.sp),
+              right: 18.sp,
+              child: MapCompassButton(
+                animatedMapController: _animatedMapController,
+              ),
+            ),
 
             /// SWAP ROUTES BUTTON (when car type is selected)
             if ((!appState.focusNodePickup.hasFocus &&
