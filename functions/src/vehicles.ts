@@ -1,11 +1,10 @@
-// Mirrors a partner's vehicle onto the assigned driver's PUBLIC profile so the
-// passenger app can show real vehicle data.
+// Mirrors optional partner-fleet vehicle details onto the driver's PUBLIC
+// profile. Matching categories are managed directly under /drivers/{uid}.
 //
 // Why: vehicles live under /partners/{partnerId}/vehicles/{vehicleId}, which
 // passengers cannot read (partner subtree is admin/support-only). The passenger
-// app reads /users/{driverUid}/vehicle (users/$uid is world-readable to authed
-// users). This trigger keeps that public snapshot in sync — on assign, edit,
-// unassign and delete — so nothing shown to the passenger is fictional.
+// app reads legacy display details from /users/{driverUid}/vehicle; dispatch
+// and acceptance read categories from /drivers/{driverUid}, independently.
 
 import * as admin from "firebase-admin";
 import * as functions from "firebase-functions/v1";
@@ -17,14 +16,13 @@ interface VehicleNode {
   model?: string;
   plate?: string;
   type?: string;
-  category?: string;
   seats?: number;
   color?: string;
   photoUrl?: string;
   status?: string;
 }
 
-/** Public snapshot written to /users/{driverId}/vehicle (only defined fields). */
+/** Public vehicle details written to /users/{driverId}/vehicle. */
 function publicSnapshot(
   partnerId: string,
   vehicleId: string,
@@ -33,7 +31,6 @@ function publicSnapshot(
   const snap: Record<string, unknown> = {
     vehicleId,
     partnerId,
-    category: v.category ?? "economico",
   };
   if (v.model !== undefined) snap.model = v.model;
   if (v.plate !== undefined) snap.plate = v.plate;
@@ -76,9 +73,9 @@ export async function mirrorVehicleCore(
   }
 
   if (after && newDriver) {
-    await db
-      .ref(`users/${newDriver}/vehicle`)
-      .set(publicSnapshot(partnerId, vehicleId, after));
+    await db.ref(`users/${newDriver}/vehicle`).set(
+      publicSnapshot(partnerId, vehicleId, after)
+    );
   }
 }
 

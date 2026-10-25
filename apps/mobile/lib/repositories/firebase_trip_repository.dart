@@ -170,7 +170,6 @@ class FirebaseTripRepository implements ITripRepository {
     if (passengerName != null) updates["passengerName"] = passengerName;
 
     await _db.child("trips/$tripId").update(updates);
-    await _db.child("drivers/$driverUid").update({"busy": true});
   }
 
   @override

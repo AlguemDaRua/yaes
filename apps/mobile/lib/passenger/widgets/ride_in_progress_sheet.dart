@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -14,6 +12,9 @@ import 'package:provider/provider.dart';
 
 class RideInProgressSheet extends StatelessWidget {
   static const Color _accentColor = Color(0xffe5a400);
+  static const Color _ink = Color(0xff202124);
+  static const Color _muted = Color(0xff70757a);
+  static const Color _line = Color(0xffe8e8e8);
 
   final bool isSearchingDriver;
   final VoidCallback onRouteChanged;
@@ -29,21 +30,29 @@ class RideInProgressSheet extends StatelessWidget {
     final appState = Provider.of<PassengerState>(context);
     final screenSize = MediaQuery.sizeOf(context);
     final compactHeight = screenSize.height < 700;
+    final hasDriver =
+        appState.tripStatus == 'accepted' || appState.tripStatus == 'started';
+    final maxChildSize = compactHeight ? 0.94 : 0.86;
+    final estimatedContentHeight = hasDriver ? 540.h : 455.h;
+    final initialChildSize = (estimatedContentHeight / screenSize.height)
+        .clamp(0.5, maxChildSize)
+        .toDouble();
+
     return DraggableScrollableSheet(
       minChildSize: 0.3,
-      maxChildSize: compactHeight ? 0.94 : 0.86,
-      initialChildSize: compactHeight ? 0.76 : 0.68,
+      maxChildSize: maxChildSize,
+      initialChildSize: initialChildSize,
       builder: (context, scrollController) {
         return Container(
           alignment: Alignment.topCenter,
           decoration: BoxDecoration(
-            color: const Color(0xFFF7F6F2),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(30.r)),
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24.r)),
             boxShadow: const [
               BoxShadow(
-                color: Color(0x18000000),
-                blurRadius: 28,
-                offset: Offset(0, -8),
+                color: Color(0x16000000),
+                blurRadius: 18,
+                offset: Offset(0, -4),
               ),
             ],
           ),
@@ -51,12 +60,7 @@ class RideInProgressSheet extends StatelessWidget {
             top: false,
             child: SingleChildScrollView(
               controller: scrollController,
-              padding: EdgeInsets.fromLTRB(
-                16.w,
-                10.h,
-                16.w,
-                math.max(16.h, MediaQuery.of(context).padding.bottom),
-              ),
+              padding: EdgeInsets.fromLTRB(20.w, 8.h, 20.w, 15.h),
               child: Align(
                 alignment: Alignment.topCenter,
                 child: ConstrainedBox(
@@ -73,10 +77,9 @@ class RideInProgressSheet extends StatelessWidget {
                         stops: appState.stops,
                       ),
                       SizedBox(height: 12.h),
-                      (appState.tripStatus == 'accepted' ||
-                              appState.tripStatus == 'started')
+                      hasDriver
                           ? const SelectedCarCard()
-                          : SearchingDriver(category: appState.carCategory),
+                          : const SearchingDriver(),
                       SizedBox(height: 8.h),
                       _CancelTripCard(
                         onCancel: () async {
@@ -124,7 +127,7 @@ class _HandleBar extends StatelessWidget {
         width: 42.w,
         height: 4.h,
         decoration: BoxDecoration(
-          color: const Color(0xFFC7C9C0),
+          color: const Color(0xFFD6D6D6),
           borderRadius: BorderRadius.circular(99.r),
         ),
       ),
@@ -140,64 +143,31 @@ class _CancelTripCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.all(14.w),
+      padding: EdgeInsets.fromLTRB(14.w, 12.h, 14.w, 8.h),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(22.r),
-        border: Border.all(color: const Color(0xFFE9EAE3)),
+        color: const Color(0xFFF8F8F8),
+        borderRadius: BorderRadius.circular(16.r),
+        border: Border.all(color: RideInProgressSheet._line),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(
-                Icons.shield_outlined,
-                size: 19.sp,
-                color: RideInProgressSheet._accentColor,
-              ),
-              SizedBox(width: 8.w),
               Expanded(
                 child: Text(
-                  'Precisa cancelar?',
+                  'Cancelar viagem',
                   style: GoogleFonts.poppins(
                     fontSize: 14.sp,
                     fontWeight: FontWeight.w700,
-                    color: const Color(0xFF202520),
+                    color: RideInProgressSheet._ink,
                   ),
                 ),
               ),
             ],
           ),
-          SizedBox(height: 4.h),
-          Text(
-            'Deslize para iniciar o cancelamento. Vamos confirmar consigo antes.',
-            style: GoogleFonts.poppins(
-              fontSize: 12.sp,
-              height: 1.45,
-              color: const Color(0xFF74786E),
-            ),
-          ),
           SizedBox(height: 12.h),
           CancelRideSlider(onCancel: onCancel),
-          Center(
-            child: TextButton.icon(
-              onPressed: () async {
-                final confirmed = await showCancelDialog(context);
-                if (confirmed == true && context.mounted) await onCancel();
-              },
-              icon: const Icon(Icons.close_rounded, size: 18),
-              label: const Text('Cancelar sem deslizar'),
-              style: TextButton.styleFrom(
-                minimumSize: Size(48.w, 48.h),
-                foregroundColor: const Color(0xFF7E3029),
-                textStyle: GoogleFonts.poppins(
-                  fontSize: 12.sp,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ),
         ],
       ),
     );
@@ -226,28 +196,17 @@ class _SheetHeader extends StatelessWidget {
       subtitle = 'O motorista aceitou o seu pedido';
       icon = Icons.directions_car_rounded;
       statusLabel = 'CONFIRMADO';
-      statusColor = const Color(0xFF26734D);
+      statusColor = const Color(0xFF238636);
     } else if (status == 'in_progress' || status == 'started') {
       title = 'Viagem em curso';
       subtitle = 'Acompanhe os detalhes da sua viagem';
       icon = Icons.location_on_rounded;
       statusLabel = 'EM VIAGEM';
-      statusColor = const Color(0xFF26734D);
+      statusColor = const Color(0xFF238636);
     }
 
     return Row(
       children: [
-        Container(
-          width: 46.w,
-          height: 46.w,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: const Color(0xFF202520),
-            borderRadius: BorderRadius.circular(16.r),
-          ),
-          child: Icon(icon, color: const Color(0xFFF2C94C), size: 22.sp),
-        ),
-        SizedBox(width: 12.w),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -276,7 +235,7 @@ class _SheetHeader extends StatelessWidget {
                 style: GoogleFonts.poppins(
                   fontSize: 18.sp,
                   fontWeight: FontWeight.w700,
-                  color: const Color(0xFF202520),
+                  color: RideInProgressSheet._ink,
                 ),
               ),
               SizedBox(height: 1.h),
@@ -286,11 +245,22 @@ class _SheetHeader extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: GoogleFonts.poppins(
                   fontSize: 12.sp,
-                  color: const Color(0xFF74786E),
+                  color: RideInProgressSheet._muted,
                 ),
               ),
             ],
           ),
+        ),
+        SizedBox(width: 12.w),
+        Container(
+          width: 42.w,
+          height: 42.w,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFF7E0),
+            borderRadius: BorderRadius.circular(14.r),
+          ),
+          child: Icon(icon, color: _accentColor, size: 21.sp),
         ),
         if (status == 'accepted' || status == 'started')
           IconButton.filledTonal(
@@ -359,11 +329,11 @@ class _RouteSummaryCard extends StatelessWidget {
     final stopsText = _stopsLabel();
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.all(15.w),
+      padding: EdgeInsets.all(14.w),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(22.r),
-        border: Border.all(color: const Color(0xFFE9EAE3)),
+        color: const Color(0xFFF8F8F8),
+        borderRadius: BorderRadius.circular(16.r),
+        border: Border.all(color: RideInProgressSheet._line),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -378,7 +348,7 @@ class _RouteSummaryCard extends StatelessWidget {
                   fontSize: 10.sp,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 0.8,
-                  color: const Color(0xFF74786E),
+                  color: RideInProgressSheet._muted,
                 ),
               ),
               const Spacer(),
@@ -386,7 +356,7 @@ class _RouteSummaryCard extends StatelessWidget {
                 Container(
                   padding: EdgeInsets.symmetric(horizontal: 9.w, vertical: 4.h),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF5F6F1),
+                    color: Colors.white,
                     borderRadius: BorderRadius.circular(99.r),
                   ),
                   child: Text(
@@ -394,7 +364,7 @@ class _RouteSummaryCard extends StatelessWidget {
                     style: GoogleFonts.poppins(
                       fontSize: 10.sp,
                       fontWeight: FontWeight.w600,
-                      color: const Color(0xFF5D6258),
+                      color: RideInProgressSheet._muted,
                     ),
                   ),
                 ),
@@ -409,7 +379,7 @@ class _RouteSummaryCard extends StatelessWidget {
                 : fromAddress,
           ),
           SizedBox(height: 10.sp),
-          Divider(color: const Color(0xFFE9EAE3), height: 22.h, indent: 49.w),
+          Divider(color: RideInProgressSheet._line, height: 22.h, indent: 49.w),
           _RouteRow(
             icon: Icons.flag_rounded,
             label: 'DESTINO',
@@ -417,7 +387,11 @@ class _RouteSummaryCard extends StatelessWidget {
           ),
           if (stopsText.isNotEmpty) ...[
             SizedBox(height: 10.sp),
-            Divider(color: const Color(0xFFE9EAE3), height: 22.h, indent: 49.w),
+            Divider(
+              color: RideInProgressSheet._line,
+              height: 22.h,
+              indent: 49.w,
+            ),
             _RouteRow(
               icon: Icons.pin_drop_rounded,
               label: 'PARAGENS',
@@ -450,7 +424,7 @@ class _RouteRow extends StatelessWidget {
           width: 38.w,
           height: 38.w,
           decoration: BoxDecoration(
-            color: const Color(0xFFFFF8DF),
+            color: const Color(0xFFFFF7E0),
             borderRadius: BorderRadius.circular(13.r),
           ),
           child: Icon(icon, color: _accentColor, size: 18.sp),
@@ -466,7 +440,7 @@ class _RouteRow extends StatelessWidget {
                   fontSize: 10.sp,
                   fontWeight: FontWeight.w600,
                   letterSpacing: 0.45,
-                  color: const Color(0xFF74786E),
+                  color: RideInProgressSheet._muted,
                 ),
               ),
               SizedBox(height: 2.sp),
@@ -477,7 +451,7 @@ class _RouteRow extends StatelessWidget {
                 style: GoogleFonts.poppins(
                   fontSize: 13.sp,
                   fontWeight: FontWeight.w600,
-                  color: const Color(0xFF202520),
+                  color: RideInProgressSheet._ink,
                 ),
               ),
             ],

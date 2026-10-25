@@ -69,8 +69,8 @@ void _showLocalNotification(RemoteMessage message) {
         'trips',
         'Viagens',
         channelDescription: 'Notificacoes de viagens',
-        importance: Importance.high,
-        priority: Priority.high,
+        importance: Importance.max,
+        priority: Priority.max,
         icon: '@mipmap/ic_launcher',
       ),
       iOS: DarwinNotificationDetails(
@@ -93,16 +93,30 @@ class MessagingService {
   static void Function(NotificationPayload payload)? onNotificationTap;
 
   /// Callback specifically for when a new trip request is received in the foreground.
-  static void Function(String tripId)? onNewTripReceived;
+  static bool Function(String tripId)? onNewTripReceived;
 
   /// Initialize FCM: request permission, get token, configure handlers
   static Future<void> initialize() async {
+    // FCM uses this Android channel when the app is in the background or
+    // terminated. Create it explicitly so incoming offers have sound/vibration
+    // instead of relying on Android's silent fallback channel.
+    await localNotifications
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >()
+        ?.createNotificationChannel(
+          const AndroidNotificationChannel(
+            'trips',
+            'Viagens',
+            description: 'Pedidos de viagem e actualizações',
+            importance: Importance.max,
+            playSound: true,
+            enableVibration: true,
+          ),
+        );
+
     // Request permission (iOS and Android 13+)
-    await _messaging.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-    );
+    await _messaging.requestPermission(alert: true, badge: true, sound: true);
 
     // Background/terminated message handler
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
@@ -113,7 +127,8 @@ class MessagingService {
 
       // If it's a new trip request, trigger the special foreground handler
       if (payload?.type == 'new_trip' && payload?.tripId != null) {
-        onNewTripReceived?.call(payload!.tripId!);
+        final handled = onNewTripReceived?.call(payload!.tripId!) ?? false;
+        if (!handled) _showLocalNotification(message);
       } else {
         // Otherwise, show as a standard local notification
         _showLocalNotification(message);

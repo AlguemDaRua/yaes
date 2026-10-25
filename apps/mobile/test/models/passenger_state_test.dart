@@ -11,7 +11,10 @@ void main() {
   setUp(() {
     fakeRepo = FakeTripRepository();
     state = PassengerState(
-        repository: fakeRepo, auth: FakeAuthRepository(), simulateLoading: false);
+      repository: fakeRepo,
+      auth: FakeAuthRepository(),
+      simulateLoading: false,
+    );
   });
 
   group('PassengerState stops management', () {
@@ -20,7 +23,10 @@ void main() {
     });
 
     test('addStop appends a stop', () {
-      state.addStop({'name': 'Paragem A', 'latlong': const LatLng(-25.9, 32.5)});
+      state.addStop({
+        'name': 'Paragem A',
+        'latlong': const LatLng(-25.9, 32.5),
+      });
       expect(state.stops.length, 1);
       expect(state.stops.first['name'], 'Paragem A');
     });
@@ -58,7 +64,10 @@ void main() {
 
     test('setStops replaces the list', () {
       state.addStop({'name': 'old'});
-      state.setStops([{'name': 'X'}, {'name': 'Y'}]);
+      state.setStops([
+        {'name': 'X'},
+        {'name': 'Y'},
+      ]);
       expect(state.stops.length, 2);
       expect(state.stops[0]['name'], 'X');
     });
@@ -239,13 +248,67 @@ void main() {
     });
   });
 
+  group('PassengerState driver categories', () {
+    setUp(() {
+      fakeRepo.onlineDrivers = [
+        {
+          'uid': 'driver-1',
+          'busy': false,
+          'categories': {'economico': true, 'txopela': true},
+        },
+        {
+          'uid': 'driver-2',
+          'busy': false,
+          'categories': {'confort': true},
+        },
+        {
+          'uid': 'driver-3',
+          'busy': true,
+          'categories': {'moto': true},
+        },
+      ];
+      state.listenToOnlineDrivers();
+    });
+
+    test(
+      'counts available categories from drivers, excluding busy drivers',
+      () async {
+        await Future<void>.delayed(Duration.zero);
+
+        expect(await state.availableVehicleCountsByCategory(), {
+          'economico': 1,
+          'txopela': 1,
+          'confort': 1,
+        });
+      },
+    );
+
+    test(
+      'matches vehicle details with the category stored on the driver',
+      () async {
+        fakeRepo.profiles['driver-1'] = {
+          'name': 'Motorista 1',
+          'vehicle': {'model': 'Toyota Vitz', 'plate': 'AAA-01-MP'},
+        };
+        await Future<void>.delayed(Duration.zero);
+
+        final vehicles = await state.availableVehicles('txopela');
+        expect(vehicles, hasLength(1));
+        expect(vehicles.single['driverUid'], 'driver-1');
+        expect(vehicles.single['category'], 'txopela');
+      },
+    );
+  });
+
   group('PassengerState address list', () {
     test('address list has default POIs', () {
       expect(state.address.isNotEmpty, isTrue);
     });
 
     test('address setter replaces the list', () {
-      state.address = [{'name': 'New Place', 'latlong': const LatLng(-25.9, 32.5)}];
+      state.address = [
+        {'name': 'New Place', 'latlong': const LatLng(-25.9, 32.5)},
+      ];
       expect(state.address.length, 1);
       expect(state.address.first['name'], 'New Place');
     });

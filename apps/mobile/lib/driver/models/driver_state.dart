@@ -168,7 +168,7 @@ class DriverState extends ChangeNotifier {
     try {
       HapticFeedback.mediumImpact().catchError((_) {});
     } catch (_) {}
-    
+
     try {
       await _tripRepository.acceptTrip(tripId, uid);
       _startListeningToTrip(tripId);

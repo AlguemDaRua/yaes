@@ -2,13 +2,15 @@ import {mirrorVehicleCore} from "../vehicles";
 import {db} from "./fake-db";
 
 describe("mirrorVehicleCore", () => {
-  test("mirrors an assigned vehicle onto the driver's public profile", async () => {
-    const d = db({users: {drv: {name: "M", type: "driver"}}});
+  test("mirrors optional vehicle details without changing direct driver categories", async () => {
+    const d = db({
+      users: {drv: {name: "M", type: "driver"}},
+      drivers: {drv: {categories: {moto: true}}},
+    });
     await mirrorVehicleCore(d as never, "p1", "v1", null, {
       driverId: "drv",
       model: "Toyota Vitz",
       plate: "AAA-01-MP",
-      category: "economico",
       seats: 4,
       photoUrl: "https://x/car.png",
     });
@@ -17,15 +19,17 @@ describe("mirrorVehicleCore", () => {
       partnerId: "p1",
       model: "Toyota Vitz",
       plate: "AAA-01-MP",
-      category: "economico",
       photoUrl: "https://x/car.png",
     });
+    expect(d.store.users.drv.vehicle).not.toHaveProperty("categories");
+    expect(d.store.drivers.drv).toEqual({categories: {moto: true}});
   });
 
-  test("defaults category to economico when absent", async () => {
+  test("does not create driver categories from partner vehicle records", async () => {
     const d = db({});
     await mirrorVehicleCore(d as never, "p1", "v1", null, {driverId: "drv"});
-    expect(d.store.users.drv.vehicle.category).toBe("economico");
+    expect(d.store.users.drv.vehicle).not.toHaveProperty("category");
+    expect(d.store.drivers?.drv).toBeUndefined();
   });
 
   test("clears the mirror when the driver is unassigned", async () => {
@@ -41,7 +45,10 @@ describe("mirrorVehicleCore", () => {
   });
 
   test("moves the mirror to the new driver on reassign", async () => {
-    const d = db({users: {old: {vehicle: {vehicleId: "v1"}}, neu: {}}});
+    const d = db({
+      users: {old: {vehicle: {vehicleId: "v1"}}, neu: {}},
+      drivers: {old: {categories: {economico: true}}},
+    });
     await mirrorVehicleCore(
       d as never,
       "p1",
@@ -50,7 +57,9 @@ describe("mirrorVehicleCore", () => {
       {driverId: "neu", model: "Vitz"}
     );
     expect(d.store.users.old.vehicle).toBeUndefined();
+    expect(d.store.drivers.old).toEqual({categories: {economico: true}});
     expect(d.store.users.neu.vehicle).toMatchObject({vehicleId: "v1"});
+    expect(d.store.drivers.neu).toBeUndefined();
   });
 
   test("does not clear a mirror the driver already replaced", async () => {
@@ -61,8 +70,22 @@ describe("mirrorVehicleCore", () => {
   });
 
   test("clears the mirror when the vehicle is deleted", async () => {
-    const d = db({users: {drv: {vehicle: {vehicleId: "v1"}}}});
+    const d = db({
+      users: {drv: {vehicle: {vehicleId: "v1"}}},
+      drivers: {
+        drv: {
+          vehicleId: "v1",
+          category: "confort",
+          categories: {confort: true},
+        },
+      },
+    });
     await mirrorVehicleCore(d as never, "p1", "v1", {driverId: "drv"}, null);
     expect(d.store.users.drv.vehicle).toBeUndefined();
+    expect(d.store.drivers.drv).toEqual({
+      vehicleId: "v1",
+      category: "confort",
+      categories: {confort: true},
+    });
   });
 });

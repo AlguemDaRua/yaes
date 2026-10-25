@@ -91,6 +91,13 @@ export interface PricingConfig {
   categories?: Record<string, CategoryConfig>;
 }
 
+const DEFAULT_CATEGORY_MULTIPLIERS: Record<string, number> = {
+  economico: 1,
+  confort: 1.35,
+  txopela: 0.7,
+  moto: 0.214,
+};
+
 /** Merges the stored fare overrides over the hardcoded defaults. */
 export function resolveFare(tripType: TripType, config?: PricingConfig): Fare {
   const overrides = config?.fares?.[tripType];
@@ -114,7 +121,8 @@ export function resolveCategoryMultiplier(
 ): number {
   if (!category) return 1;
   const m = config?.categories?.[category]?.multiplier;
-  return typeof m === "number" && isFinite(m) && m > 0 ? m : 1;
+  if (typeof m === "number" && isFinite(m) && m > 0) return m;
+  return DEFAULT_CATEGORY_MULTIPLIERS[category] ?? 1;
 }
 
 /** Reads /config/pricing; returns undefined on absence or error (fallback). */

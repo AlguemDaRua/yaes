@@ -15,7 +15,7 @@
       ".read": "auth != null && (root.child('admins/' + auth.uid).val() === true || root.child('users/' + auth.uid + '/type').val() === 'support')",
       "$uid": {
         ".read": "auth != null",
-        ".write": "$uid === auth.uid",
+        ".write": "auth != null && (($uid === auth.uid && ((!data.exists() && newData.child('type').val() === 'passenger' && !newData.child('partnerId').exists() && !newData.child('role').exists() && !newData.child('vehicleId').exists() && !newData.child('vehicle').exists()) || (data.exists() && newData.child('type').val() === data.child('type').val() && newData.child('partnerId').val() === data.child('partnerId').val() && newData.child('role').val() === data.child('role').val() && newData.child('vehicleId').val() === data.child('vehicleId').val() && newData.child('vehicle/vehicleId').val() === data.child('vehicle/vehicleId').val() && newData.child('vehicle/partnerId').val() === data.child('vehicle/partnerId').val() && newData.child('vehicle/category').val() === data.child('vehicle/category').val() && newData.child('vehicle/categories/economico').val() === data.child('vehicle/categories/economico').val() && newData.child('vehicle/categories/confort').val() === data.child('vehicle/categories/confort').val() && newData.child('vehicle/categories/txopela').val() === data.child('vehicle/categories/txopela').val() && newData.child('vehicle/categories/moto').val() === data.child('vehicle/categories/moto').val()))) || root.child('admins/' + auth.uid).val() === true)",
         ".validate": "newData.hasChildren(['phone', 'type', 'createdAt'])",
         "type": {
           ".write": "auth != null && (root.child('admins/' + auth.uid).val() === true || ($uid === auth.uid && newData.val() === 'passenger'))",
@@ -45,6 +45,13 @@
         "fcmToken": {
           ".validate": "newData.isString()"
         },
+        "vehicle": {
+          "categories": {
+            "$category": {
+              ".validate": "($category === 'economico' || $category === 'confort' || $category === 'txopela' || $category === 'moto') && newData.isBoolean()"
+            }
+          }
+        },
         "$other": {
           ".validate": "true"
         }
@@ -59,7 +66,7 @@
       ".read": "auth != null",
       "$tripId": {
         ".read": "auth != null && (data.child('passenger').val() === auth.uid || data.child('driver').val() === auth.uid || data.child('status').val() === 'pending')",
-        ".write": "auth != null && (!data.exists() || data.child('passenger').val() === auth.uid ||data.child('driver').val() === auth.uid || (data.child('status').val() === 'pending' && !data.child('driver').exists() && newData.child('driver').val() === auth.uid && newData.child('status').val() === 'accepted'))",
+        ".write": "auth != null && ((!data.exists() && newData.child('passenger').val() === auth.uid) || data.child('passenger').val() === auth.uid || data.child('driver').val() === auth.uid || (data.child('status').val() === 'pending' && data.child('offeredTo').val() === auth.uid && !data.child('driver').exists() && newData.child('driver').val() === auth.uid && newData.child('status').val() === 'accepted' && root.child('drivers/' + auth.uid + '/online').val() === true && root.child('drivers/' + auth.uid + '/busy').val() !== true && (root.child('drivers/' + auth.uid + '/categories').child(data.child('carCategory').val() === null ? 'economico' : data.child('carCategory').val()).val() === true || root.child('drivers/' + auth.uid + '/category').val() === (data.child('carCategory').val() === null ? 'economico' : data.child('carCategory').val()))))",
         ".validate": "newData.hasChildren(['passenger', 'origin', 'destination', 'status', 'paymentMethod', 'tipo'])",
         "tipo": {
           ".validate": "newData.val() === 'regular' || newData.val() === 'scheduled' || newData.val() === 'airport' || newData.val() === 'event'"
@@ -68,7 +75,7 @@
           ".validate": "!newData.exists() || newData.val() === 'regular' || newData.val() === 'scheduled' || newData.val() === 'airport' || newData.val() === 'event'"
         },
         "status": {
-          ".validate": "newData.val() === 'awaiting_payment' || newData.val() === 'pending' || newData.val() === 'accepted' || newData.val() === 'started' || newData.val() === 'completed' || newData.val() === 'cancelled'"
+          ".validate": "newData.val() === 'awaiting_payment' || newData.val() === 'pending' || newData.val() === 'accepted' || newData.val() === 'started' || newData.val() === 'completed' || newData.val() === 'cancelled' || newData.val() === 'no_driver_available'"
         },
         "estimatedPrice": {
           ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 0)"
@@ -77,6 +84,9 @@
           ".validate": "!newData.exists() || (newData.isNumber() && newData.val() >= 1.0 && newData.val() <= 2.0)"
         },
         "carCategory": {
+          ".validate": "!newData.exists() || newData.val() === 'economico' || newData.val() === 'confort' || newData.val() === 'txopela' || newData.val() === 'moto'"
+        },
+        "offeredTo": {
           ".validate": "!newData.exists() || newData.isString()"
         },
         "$other": {
@@ -110,8 +120,19 @@
         },
         "online": {
           ".read": "auth != null",
-          ".write": "$uid === auth.uid",
+          ".write": "auth != null && $uid === auth.uid && root.child('users/' + $uid + '/type').val() === 'driver'",
           ".validate": "newData.isBoolean()"
+        },
+        "vehicleId": {
+          ".validate": "!newData.exists() || newData.isString()"
+        },
+        "category": {
+          ".validate": "!newData.exists() || newData.val() === 'economico' || newData.val() === 'confort' || newData.val() === 'txopela' || newData.val() === 'moto'"
+        },
+        "categories": {
+          "$category": {
+            ".validate": "($category === 'economico' || $category === 'confort' || $category === 'txopela' || $category === 'moto') && newData.isBoolean()"
+          }
         }
       }
     },
@@ -172,7 +193,12 @@
         },
         "vehicles": {
           "$vehicleId": {
-            ".validate": "newData.hasChildren(['plate', 'model', 'type', 'status'])"
+            ".validate": "newData.hasChildren(['plate', 'model', 'type', 'status'])",
+            "categories": {
+              "$category": {
+                ".validate": "($category === 'economico' || $category === 'confort' || $category === 'txopela' || $category === 'moto') && newData.isBoolean()"
+              }
+            }
           }
         },
         "drivers": {

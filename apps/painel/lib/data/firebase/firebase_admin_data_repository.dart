@@ -390,9 +390,23 @@ class FirebaseAdminDataRepository implements AdminDataRepository {
       phone: _string(user, 'phone'),
       email: _string(user, 'email'),
       vehicleId: _string(user, 'vehicleId') ?? _string(state, 'vehicleId'),
+      categories: _driverCategories(state),
       rating: _double(user, 'rating') ?? 0,
       tripsCount: _int(user, 'tripsCount') ?? 0,
     );
+  }
+
+  List<String> _driverCategories(Map<String, dynamic> state) {
+    final raw = state['categories'];
+    if (raw is Map) {
+      return raw.entries
+          .where((entry) => entry.value == true)
+          .map((entry) => entry.key.toString())
+          .toList();
+    }
+    if (raw is Iterable) return raw.map((value) => value.toString()).toList();
+    final legacy = _string(state, 'category');
+    return legacy == null ? const <String>[] : <String>[legacy];
   }
 
   AdminVehicle _vehicleFromMap(
@@ -400,6 +414,16 @@ class FirebaseAdminDataRepository implements AdminDataRepository {
     String id,
     Map<String, dynamic> map,
   ) {
+    final rawCategories = map['categories'];
+    final categories = rawCategories is Map
+        ? rawCategories.entries
+            .where((entry) => entry.value == true)
+            .map((entry) => entry.key.toString())
+            .toList()
+        : rawCategories is Iterable
+            ? rawCategories.map((category) => category.toString()).toList()
+            : <String>[];
+    final category = _string(map, 'category');
     return AdminVehicle(
       id: id,
       partnerId: partnerId,
@@ -409,7 +433,10 @@ class FirebaseAdminDataRepository implements AdminDataRepository {
       status: _string(map, 'status') ?? 'available',
       driverId: _string(map, 'driverId'),
       year: _int(map, 'year'),
-      category: _string(map, 'category'),
+      category: category,
+      categories: categories.isEmpty
+          ? (category == null ? const <String>[] : <String>[category])
+          : categories,
       seats: _int(map, 'seats'),
       photoUrl: _string(map, 'photoUrl'),
       color: _string(map, 'color'),

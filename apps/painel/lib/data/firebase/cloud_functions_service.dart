@@ -12,9 +12,8 @@ class CloudFunctionsService {
 
   final FirebaseFunctions _functions;
 
-  /// Promove um user para um determinado role. Admin only.
-  /// Roles que requerem `partnerId`: `driver`, `partner_owner`,
-  /// `partner_staff`.
+  /// Promove um utilizador para um role. Motoristas directos não precisam de
+  /// partnerId; partner_owner e partner_staff continuam ligados a um parceiro.
   Future<void> setUserRole({
     required String uid,
     required String role,
@@ -24,6 +23,18 @@ class CloudFunctionsService {
       'uid': uid,
       'role': role,
       if (partnerId != null) 'partnerId': partnerId,
+    });
+  }
+
+  /// Define as categorias de serviço do motorista directamente em
+  /// /drivers/{uid}; não depende de partner nem de veículo de frota.
+  Future<void> setDriverCategories({
+    required String uid,
+    required List<String> categories,
+  }) async {
+    await _functions.httpsCallable('setDriverCategories').call<dynamic>({
+      'uid': uid,
+      'categories': categories,
     });
   }
 

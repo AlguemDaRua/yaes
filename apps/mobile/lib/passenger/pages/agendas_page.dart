@@ -30,7 +30,7 @@ class _MyAgendasState extends State<MyAgendas> {
       context,
       listen: false,
     );
-    
+
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: tripRepo.readSchedules(authRepo.currentUser?.uid ?? ''),
       builder: (context, snapshot) {
@@ -527,6 +527,7 @@ class _MyAgendasState extends State<MyAgendas> {
         appState.selectedCarIndex = agenda['selectedCarIndex'];
         appState.selectedCarType = agenda['selectedCarType'];
         appState.selectedCarTypeindex = agenda['selectedCarTypeIndex'];
+        appState.selectedCategoryId = agenda['selectedCategoryId']?.toString();
         appState.paymentMethod = agenda['paymentMethod'];
         appState.isPaymentSelected = agenda['isPaymentSelected'];
         appState.stops = agenda['stops'];

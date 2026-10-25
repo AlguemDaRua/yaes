@@ -29,7 +29,9 @@ const VALID_ROLES = [
 
 type Role = (typeof VALID_ROLES)[number];
 
-const ROLES_NEEDING_PARTNER: Role[] = ["driver", "partner_owner", "partner_staff"];
+const ROLES_NEEDING_PARTNER: Role[] = ["partner_owner", "partner_staff"];
+
+const DRIVER_CATEGORIES = ["economico", "confort", "txopela", "moto"] as const;
 
 // ─────────────────────────────────────────────────────────────
 // Shared helpers
@@ -127,6 +129,54 @@ export async function setUserRoleCore(
 export const setUserRole = functions.https.onCall(
   (data: SetUserRoleData, context: functions.https.CallableContext) =>
     setUserRoleCore(admin.database(), assertAuth(context), data)
+);
+
+// Direct-driver service categories. These belong to /drivers/{uid}, not to
+// a partner fleet or the public /users profile. Dispatch reads this node.
+export async function setDriverCategoriesCore(
+  db: Database,
+  callerUid: string,
+  data: {uid: string; categories: string[]}
+): Promise<{success: true; uid: string; categories: string[]}> {
+  await assertAdmin(db, callerUid);
+  const {uid, categories} = data;
+  if (!uid || !Array.isArray(categories) || categories.length === 0 ||
+      categories.some((category) =>
+        !DRIVER_CATEGORIES.includes(category as typeof DRIVER_CATEGORIES[number])
+      )) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "Select at least one valid driver category."
+    );
+  }
+  const userSnap = await db.ref(`users/${uid}/type`).get();
+  if (userSnap.val() !== "driver") {
+    throw new functions.https.HttpsError(
+      "failed-precondition",
+      "The user must have the driver role."
+    );
+  }
+  const uniqueCategories = [...new Set(categories)];
+  const categoryMap = Object.fromEntries(
+    uniqueCategories.map((category) => [category, true])
+  );
+  await db.ref(`drivers/${uid}`).update({
+    category: uniqueCategories[0],
+    categories: categoryMap,
+  });
+  await writeAudit(db, {
+    action: "setDriverCategories",
+    actorUid: callerUid,
+    targetType: "driver",
+    targetId: uid,
+    meta: {categories: uniqueCategories},
+  });
+  return {success: true, uid, categories: uniqueCategories};
+}
+
+export const setDriverCategories = functions.https.onCall(
+  (data: {uid: string; categories: string[]}, context: functions.https.CallableContext) =>
+    setDriverCategoriesCore(admin.database(), assertAuth(context), data)
 );
 
 // ─────────────────────────────────────────────────────────────

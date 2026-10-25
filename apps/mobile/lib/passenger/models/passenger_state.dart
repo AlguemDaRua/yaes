@@ -255,6 +255,7 @@ class PassengerState extends ChangeNotifier {
     _selectedCarType = label;
     _selectedCarTypeindex = index;
     _selectedCarIndex = null;
+    _tripStatus = '';
     notifyListeners();
   }
 
@@ -264,6 +265,11 @@ class PassengerState extends ChangeNotifier {
     notifyListeners();
     // The category multiplier changes the fare, so refresh the estimate.
     if (_distanceKm > 0) fetchServerPrice();
+  }
+
+  set selectedCategoryId(String? categoryId) {
+    _selectedCategoryId = categoryId;
+    notifyListeners();
   }
 
   set selectedCarTypeindex(int? index) {
@@ -299,7 +305,9 @@ class PassengerState extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       debugPrint('Server price fetch failed, using local fallback: $e');
-      await PricingService.fetchCategories().catchError((_) => kDefaultCategories);
+      await PricingService.fetchCategories().catchError(
+        (_) => kDefaultCategories,
+      );
       final fallback = PricingService.computeLocal(
         tripType: tripType,
         distanceKm: _distanceKm,
@@ -391,7 +399,12 @@ class PassengerState extends ChangeNotifier {
         _tripStatus = newStatus;
         _isSearching = (_tripStatus == 'pending');
 
-        if (_tripStatus == 'cancelled' || _tripStatus == 'completed') {
+        if (_tripStatus == 'no_driver_available') {
+          _isPaymentSelected = false;
+          _paymentMethod = '';
+          _isSearching = false;
+          currentTripId = null;
+        } else if (_tripStatus == 'cancelled' || _tripStatus == 'completed') {
           _isPaymentSelected = false; // Fecha o bottom sheet
           _paymentMethod = '';
           _isSearching = false;
@@ -502,21 +515,18 @@ class PassengerState extends ChangeNotifier {
   }
 
   /// Veículos REAIS disponíveis na categoria: motoristas online e livres
-  /// cujo veículo (registado pelo parceiro no painel e espelhado em
-  /// users/{uid}/vehicle) pertence à categoria seleccionada.
+  /// cuja categoria atribuída em drivers/{uid}/categories corresponde à
+  /// categoria seleccionada. Os dados visuais do veículo continuam em users.
   Future<List<Map<String, dynamic>>> availableVehicles(String category) async {
-    final drivers =
-        _onlineDrivers.where((d) => d['busy'] != true).toList();
+    final drivers = _onlineDrivers.where((d) => d['busy'] != true).toList();
     final results = await Future.wait(
       drivers.map((d) async {
         final uid = d['uid']?.toString();
         if (uid == null) return null;
+        if (!_driverSupportsCategory(d, category)) return null;
         final profile = await _tripRepository.watchProfile(uid).first;
         final vehicle = profile?['vehicle'];
         if (profile == null || vehicle is! Map) return null;
-        if ((vehicle['category'] ?? 'economico').toString() != category) {
-          return null;
-        }
         return <String, dynamic>{
           'driverUid': uid,
           'driverName': profile['name']?.toString() ?? 'Motorista',
@@ -538,21 +548,32 @@ class PassengerState extends ChangeNotifier {
   /// descobrir que não há oferta.
   Future<Map<String, int>> availableVehicleCountsByCategory() async {
     final drivers = _onlineDrivers.where((d) => d['busy'] != true).toList();
-    final categories = await Future.wait(
-      drivers.map((d) async {
-        final uid = d['uid']?.toString();
-        if (uid == null) return null;
-        final profile = await _tripRepository.watchProfile(uid).first;
-        final vehicle = profile?['vehicle'];
-        if (profile == null || vehicle is! Map) return null;
-        return (vehicle['category'] ?? 'economico').toString();
-      }),
-    );
     final counts = <String, int>{};
-    for (final category in categories.whereType<String>()) {
-      counts[category] = (counts[category] ?? 0) + 1;
+    for (final driver in drivers) {
+      for (final category in _driverCategoryIds(driver)) {
+        counts[category] = (counts[category] ?? 0) + 1;
+      }
     }
     return counts;
+  }
+
+  bool _driverSupportsCategory(Map driver, String category) =>
+      _driverCategoryIds(driver).contains(category);
+
+  List<String> _driverCategoryIds(Map driver) {
+    final raw = driver['categories'];
+    if (raw is Map) {
+      final enabled = raw.entries
+          .where((entry) => entry.value == true)
+          .map((entry) => entry.key.toString())
+          .toList();
+      if (enabled.isNotEmpty) return enabled;
+    } else if (raw is Iterable) {
+      final values = raw.map((value) => value.toString()).toList();
+      if (values.isNotEmpty) return values;
+    }
+    final category = driver['category']?.toString();
+    return category == null || category.isEmpty ? const [] : [category];
   }
 
   void listenToOnlineDrivers() {

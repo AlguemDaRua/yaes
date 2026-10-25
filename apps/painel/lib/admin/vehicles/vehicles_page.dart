@@ -29,6 +29,7 @@ const Map<String, String> kCategoryLabels = {
   'moto': 'Moto',
   'txopela': 'Txopela',
   'economico': 'Económico',
+  'confort': 'Confort',
   'sedan': 'Sedan',
   'caravan': 'Caravan',
   'suv': 'SUV',
@@ -36,6 +37,13 @@ const Map<String, String> kCategoryLabels = {
   'classico': 'Clássico',
   'limousine': 'Limousine',
   'helicoptero': 'Helicóptero',
+};
+
+const Map<String, String> _serviceCategoryLabels = {
+  'economico': 'Económico',
+  'confort': 'Confort',
+  'txopela': 'Txopela',
+  'moto': 'Moto',
 };
 
 class VehiclesPage extends ConsumerStatefulWidget {
@@ -170,10 +178,8 @@ class _VehiclesPageState extends ConsumerState<VehiclesPage> {
                 YaColumn(
                   key: 'category',
                   label: 'Categoria',
-                  width: 120,
-                  cellBuilder: (row) => TextCell(
-                    kCategoryLabels[row.category] ?? row.category ?? '—',
-                  ),
+                  width: 190,
+                  cellBuilder: (row) => TextCell(row.categoryLabels),
                 ),
                 YaColumn(
                   key: 'partner',
@@ -208,6 +214,17 @@ class _VehiclesPageState extends ConsumerState<VehiclesPage> {
                         label: 'Ver detalhe',
                         icon: LucideIcons.eye,
                         onTap: () => context.go('/admin/cars/${row.plate}'),
+                      ),
+                      const YaMenuDivider(),
+                      YaMenuItem(
+                        label: 'Editar categorias',
+                        icon: LucideIcons.pencil,
+                        onTap: () => showDialog<void>(
+                          context: context,
+                          builder: (_) => _EditVehicleCategoriesDialog(
+                            vehicle: row,
+                          ),
+                        ),
                       ),
                       const YaMenuDivider(),
                       YaMenuItem(
@@ -253,6 +270,95 @@ class _VehiclesPageState extends ConsumerState<VehiclesPage> {
   }
 }
 
+class _EditVehicleCategoriesDialog extends ConsumerStatefulWidget {
+  const _EditVehicleCategoriesDialog({required this.vehicle});
+
+  final _Vehicle vehicle;
+
+  @override
+  ConsumerState<_EditVehicleCategoriesDialog> createState() =>
+      _EditVehicleCategoriesDialogState();
+}
+
+class _EditVehicleCategoriesDialogState
+    extends ConsumerState<_EditVehicleCategoriesDialog> {
+  late final Set<String> _categories = widget.vehicle.categories.isNotEmpty
+      ? widget.vehicle.categories.toSet()
+      : <String>{widget.vehicle.category ?? 'economico'};
+  bool _busy = false;
+
+  Future<void> _save() async {
+    if (_busy) return;
+    if (_categories.isEmpty) {
+      yaSnack(
+        context,
+        'Selecciona pelo menos uma categoria.',
+        variant: StatusVariant.danger,
+      );
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      final category = _categories.first;
+      await ref.read(adminDataRepositoryProvider).updateVehicle(
+        widget.vehicle.partnerId,
+        widget.vehicle.id,
+        <String, Object?>{
+          'category': category,
+          'type': kCategoryLabels[category] ?? category,
+          'categories': <String, bool>{
+            for (final value in _categories) value: true,
+          },
+        },
+      );
+      if (!mounted) return;
+      ref.invalidate(adminVehiclesProvider);
+      Navigator.of(context).pop();
+      yaSnack(context, 'Categorias do veículo atualizadas');
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      yaSnack(context, 'Erro: $e', variant: StatusVariant.danger);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FormDialog(
+      title: 'Categorias do veículo',
+      description:
+          'O motorista poderá receber pedidos de qualquer categoria seleccionada.',
+      confirmLabel: 'Guardar',
+      submitting: _busy,
+      onCancel: () => Navigator.of(context).pop(),
+      onConfirm: _save,
+      children: [
+        YaField(
+          label: 'Categorias disponíveis',
+          child: Column(
+            children: [
+              for (final category in _serviceCategoryLabels.entries)
+                CheckboxListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(category.value),
+                  value: _categories.contains(category.key),
+                  onChanged: (selected) => setState(() {
+                    if (selected == true) {
+                      _categories.add(category.key);
+                    } else {
+                      _categories.remove(category.key);
+                    }
+                  }),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _Vehicle {
   const _Vehicle(
     this.id,
@@ -262,6 +368,7 @@ class _Vehicle {
     this.year,
     this.type,
     this.category,
+    this.categories,
     this.partner,
     this.currentDriver,
     this.status,
@@ -274,9 +381,20 @@ class _Vehicle {
   final int year;
   final String type;
   final String? category;
+  final List<String> categories;
   final String partner;
   final String? currentDriver;
   final String status;
+
+  String get categoryLabels {
+    final values = categories.isEmpty && category != null
+        ? <String>[category!]
+        : categories;
+    if (values.isEmpty) return '—';
+    return values
+        .map((category) => kCategoryLabels[category] ?? category)
+        .join(', ');
+  }
 
   factory _Vehicle.fromAdmin(AdminVehicle vehicle) {
     return _Vehicle(
@@ -287,6 +405,7 @@ class _Vehicle {
       vehicle.year ?? 0,
       vehicle.type,
       vehicle.category,
+      vehicle.categories,
       vehicle.partnerId,
       vehicle.driverId,
       vehicle.status,
@@ -308,7 +427,7 @@ class _AddVehicleDialogState extends ConsumerState<_AddVehicleDialog> {
   final TextEditingController _color = TextEditingController();
   final TextEditingController _photoUrl = TextEditingController();
   String? _partnerId;
-  String _category = 'economico';
+  final Set<String> _categories = <String>{'economico'};
   bool _busy = false;
   Uint8List? _photoBytes;
   String? _photoFileName;
@@ -352,10 +471,13 @@ class _AddVehicleDialogState extends ConsumerState<_AddVehicleDialog> {
     final String model = _model.text.trim();
     final String plate = _plate.text.trim();
     final String? partnerId = _partnerId;
-    if (partnerId == null || model.isEmpty || plate.isEmpty) {
+    if (partnerId == null ||
+        model.isEmpty ||
+        plate.isEmpty ||
+        _categories.isEmpty) {
       yaSnack(
         context,
-        'Partner, modelo e matrícula são obrigatórios.',
+        'Partner, modelo, matrícula e pelo menos uma categoria são obrigatórios.',
         variant: StatusVariant.danger,
       );
       return;
@@ -379,8 +501,12 @@ class _AddVehicleDialogState extends ConsumerState<_AddVehicleDialog> {
         <String, Object?>{
           'model': model,
           'plate': plate,
-          'type': kCategoryLabels[_category] ?? _category,
-          'category': _category,
+          'type': kCategoryLabels[_categories.first] ?? _categories.first,
+          // Keep `category` for older app builds and use a map for multi-match.
+          'category': _categories.first,
+          'categories': <String, bool>{
+            for (final category in _categories) category: true,
+          },
           'seats': int.tryParse(_seats.text.trim()) ?? 4,
           'status': 'available',
           if (_color.text.trim().isNotEmpty) 'color': _color.text.trim(),
@@ -406,22 +532,22 @@ class _AddVehicleDialogState extends ConsumerState<_AddVehicleDialog> {
         const <String, dynamic>{};
     final rawCats = config['categories'];
     final categories = <MapEntry<String, String>>[
-      if (rawCats is Map && rawCats.isNotEmpty)
-        for (final e in rawCats.entries)
-          MapEntry(
-            e.key.toString(),
-            (e.value is Map ? (e.value as Map)['label'] : null)?.toString() ??
-                kCategoryLabels[e.key.toString()] ??
-                e.key.toString(),
-          )
-      else
-        for (final e in kCategoryLabels.entries) MapEntry(e.key, e.value),
+      for (final entry in _serviceCategoryLabels.entries)
+        MapEntry(
+          entry.key,
+          (rawCats is Map && rawCats[entry.key] is Map
+                      ? (rawCats[entry.key] as Map)['label']
+                      : null)
+                  ?.toString() ??
+              entry.value,
+        ),
     ];
 
     return FormDialog(
       title: 'Adicionar veículo',
-      description: 'Regista um carro da frota. A categoria define o preço e o '
-          'que o passageiro vê na app.',
+      description: 'Escolhe todas as categorias em que este veículo pode '
+          'receber pedidos. O passageiro escolhe uma categoria e o sistema '
+          'procura o motorista compatível mais próximo.',
       confirmLabel: 'Adicionar',
       submitting: _busy,
       onCancel: () => Navigator.of(context).pop(),
@@ -441,15 +567,24 @@ class _AddVehicleDialogState extends ConsumerState<_AddVehicleDialog> {
           ),
         ),
         YaField(
-          label: 'Categoria',
-          child: YaSelect<String>(
-            width: 360,
-            value: _category,
-            items: [
-              for (final c in categories)
-                YaSelectItem<String>(value: c.key, label: c.value),
+          label: 'Categorias disponíveis',
+          child: Column(
+            children: [
+              for (final category in categories)
+                CheckboxListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(category.value),
+                  value: _categories.contains(category.key),
+                  onChanged: (selected) => setState(() {
+                    if (selected == true) {
+                      _categories.add(category.key);
+                    } else {
+                      _categories.remove(category.key);
+                    }
+                  }),
+                ),
             ],
-            onChanged: (v) => setState(() => _category = v),
           ),
         ),
         YaField(

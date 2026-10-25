@@ -3,6 +3,8 @@ import 'package:limousineexecutive/repositories/trip_repository.dart';
 class FakeTripRepository implements ITripRepository {
   final Map<String, List<Map<String, dynamic>>> _schedules = {};
   final Map<String, Map<String, dynamic>> _trips = {};
+  final Map<String, Map<String, dynamic>> profiles = {};
+  List<Map<String, dynamic>> onlineDrivers = [];
   int createScheduleCallCount = 0;
 
   @override
@@ -23,16 +25,20 @@ class FakeTripRepository implements ITripRepository {
   }
 
   @override
-  Stream<Map<String, dynamic>?> watchTrip(String tripId) => Stream.value(_trips[tripId]);
+  Stream<Map<String, dynamic>?> watchTrip(String tripId) =>
+      Stream.value(_trips[tripId]);
 
   @override
-  Stream<Map<String, dynamic>?> watchDriverLocation(String driverUid) => const Stream.empty();
+  Stream<Map<String, dynamic>?> watchDriverLocation(String driverUid) =>
+      const Stream.empty();
 
   @override
-  Stream<List<Map<String, dynamic>>> watchOnlineDrivers() => Stream.value([]);
+  Stream<List<Map<String, dynamic>>> watchOnlineDrivers() =>
+      Stream.value(onlineDrivers);
 
   @override
-  Stream<Map<String, dynamic>?> watchProfile(String uid) => Stream.value(null);
+  Stream<Map<String, dynamic>?> watchProfile(String uid) =>
+      Stream.value(profiles[uid]);
 
   @override
   Future<void> updateProfile(String uid, Map<String, dynamic> fields) async {}
@@ -54,7 +60,11 @@ class FakeTripRepository implements ITripRepository {
   }
 
   @override
-  Future<void> updateSchedule(String uid, String scheduleId, Map<String, dynamic> data) async {
+  Future<void> updateSchedule(
+    String uid,
+    String scheduleId,
+    Map<String, dynamic> data,
+  ) async {
     final list = _schedules[uid];
     if (list != null) {
       final index = list.indexWhere((s) => s['id'] == scheduleId);
@@ -79,22 +89,35 @@ class FakeTripRepository implements ITripRepository {
   Future<void> setOnlineStatus(String uid, bool online) async {}
 
   @override
-  Future<void> updateLocation(String uid, double lat, double lng, double angle) async {}
+  Future<void> updateLocation(
+    String uid,
+    double lat,
+    double lng,
+    double angle,
+  ) async {}
 
   @override
   Future<void> saveFcmToken(String uid, String token) async {}
 
   @override
-  Stream<List<Map<String, dynamic>>> readTripsByPassenger(String uid) => Stream.value([]);
+  Stream<List<Map<String, dynamic>>> readTripsByPassenger(String uid) =>
+      Stream.value([]);
 
   @override
-  Stream<List<Map<String, dynamic>>> readTripsByDriver(String uid) => Stream.value([]);
+  Stream<List<Map<String, dynamic>>> readTripsByDriver(String uid) =>
+      Stream.value([]);
 
   @override
-  Future<void> sendMessage(String tripId, String senderId, String senderType, String text) async {}
+  Future<void> sendMessage(
+    String tripId,
+    String senderId,
+    String senderType,
+    String text,
+  ) async {}
 
   @override
-  Stream<List<Map<String, dynamic>>> listenToMessages(String tripId) => Stream.value([]);
+  Stream<List<Map<String, dynamic>>> listenToMessages(String tripId) =>
+      Stream.value([]);
 
   @override
   Future<void> markMessagesAsRead(String tripId, String currentUserUid) async {}

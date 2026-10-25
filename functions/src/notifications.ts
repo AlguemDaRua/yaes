@@ -19,6 +19,19 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
   return 12742 * Math.asin(Math.sqrt(a)); // 2 * R; R = 6371 km
 }
 
+/** Driver categories are mirrored to /drivers/{uid} by onVehicleChanged. */
+function vehicleSupportsCategory(
+  driver: Record<string, any>,
+  category: string,
+): boolean {
+  const categories = driver.categories;
+  if (Array.isArray(categories) && categories.includes(category)) return true;
+  if (categories && typeof categories === "object" && categories[category] === true) {
+    return true;
+  }
+  return driver.category === category;
+}
+
 /**
  * Helper to get FCM token for a user.
  */
@@ -27,15 +40,114 @@ async function getFcmToken(uid: string): Promise<string | null> {
   return snap.exists() ? (snap.val() as string) : null;
 }
 
+async function markNoDriverAvailable(
+  tripId: string,
+  passengerUid: string,
+): Promise<void> {
+  const statusRef = db.ref(`trips/${tripId}/status`);
+  let observedStatus: unknown;
+  const result = await statusRef.transaction((status) => {
+    if (status === null) {
+      // RTDB may call the updater with null before it has loaded the server
+      // value. Returning null lets the transaction reconcile and retry with
+      // the current server value instead of aborting this first attempt.
+      observedStatus = "null local; a aguardar reconciliação do servidor";
+      return null;
+    }
+    observedStatus = status;
+    return status === "pending" ? "no_driver_available" : undefined;
+  });
+  const finalStatus = result.snapshot.val();
+  if (!result.committed || finalStatus !== "no_driver_available") {
+    console.log(`[onTripCreated][${tripId}][FINAL] Estado não alterado para no_driver_available; estado observado=${observedStatus ?? "ausente"}; estado final=${finalStatus ?? "ausente"}.`);
+    return;
+  }
+  console.log(`[onTripCreated][${tripId}][FINAL] Nenhum motorista aceitou. Estado alterado para no_driver_available.`);
+
+  const payload = {
+    title: "Nenhum motorista disponível",
+    body: "Não encontrámos um motorista livre nesta categoria. Tenta novamente ou escolhe outra.",
+    type: "no_driver_available",
+    tripId,
+  };
+  try {
+    const token = await getFcmToken(passengerUid);
+    if (token) {
+      await messaging.send({
+        token,
+        notification: {title: payload.title, body: payload.body},
+        data: {type: payload.type, tripId},
+      });
+    }
+  } catch (err) {
+    console.error(
+      `[ERROR] Failed to notify passenger that trip ${tripId} has no matching driver:`,
+      err,
+    );
+  }
+  await recordNotification(db, passengerUid, payload);
+}
+
+async function setOfferedDriver(tripId: string, driverUid: string): Promise<boolean> {
+  let abortReason = "desconhecido";
+  let observedStatus: unknown;
+  let driverAlreadyAssigned = false;
+  const result = await db.ref(`trips/${tripId}`).transaction((trip) => {
+    if (trip === null) {
+      // A null first call can mean the trip is not locally cached yet.
+      // Returning null lets RTDB retry the updater with its server value.
+      abortReason = "dado local nulo; a aguardar reconciliação do servidor";
+      return null;
+    }
+    observedStatus = trip?.status;
+    driverAlreadyAssigned = Boolean(trip?.driver);
+    if (trip.status !== "pending") {
+      abortReason = "estado deixou de ser pending";
+      return undefined;
+    }
+    if (trip.driver) {
+      abortReason = "já existe um motorista atribuído";
+      return undefined;
+    }
+    if (trip.offeredTo && trip.offeredTo !== driverUid) {
+      abortReason = `oferta já atribuída a outro motorista (${trip.offeredTo})`;
+      return undefined;
+    }
+    abortReason = "nenhum; transação pronta para gravar offeredTo";
+    return {...trip, offeredTo: driverUid};
+  });
+  const finalTrip = result.snapshot.val() as Record<string, any> | null;
+  const offerWasWritten = result.committed &&
+    finalTrip?.status === "pending" &&
+    finalTrip.offeredTo === driverUid;
+  if (!offerWasWritten) {
+    console.log(`[onTripCreated][${tripId}][OFERTA NÃO GRAVADA] Motorista=${driverUid}; motivo=${abortReason}; estado observado=${observedStatus ?? "ausente"}; driver já atribuído=${driverAlreadyAssigned}; estado final=${finalTrip?.status ?? "ausente"}; offeredTo final=${finalTrip?.offeredTo ?? "ausente"}.`);
+  }
+  return offerWasWritten;
+}
+
+async function clearOfferedDriver(tripId: string, driverUid: string): Promise<void> {
+  await db.ref(`trips/${tripId}`).transaction((trip) => {
+    if (trip === null) return null;
+    if (!trip || trip.status !== "pending" || trip.offeredTo !== driverUid) {
+      return undefined;
+    }
+    return {...trip, offeredTo: null};
+  });
+}
+
 /**
  * Helper to wait for trip acceptance or timeout.
  */
-async function waitForAcceptance(tripId: string, seconds: number): Promise<boolean> {
+async function waitForAcceptance(
+  tripId: string,
+  seconds: number,
+): Promise<boolean> {
   const checkIntervalMs = 2000;
   const loops = Math.floor((seconds * 1000) / checkIntervalMs);
   
   for (let i = 0; i < loops; i++) {
-    await new Promise(resolve => setTimeout(resolve, checkIntervalMs));
+    await new Promise((resolve) => setTimeout(resolve, checkIntervalMs));
     const snap = await db.ref(`trips/${tripId}/status`).get();
     const currentStatus = snap.exists() ? snap.val() : null;
     
@@ -54,15 +166,29 @@ export const onTripCreated = functions.runWith({
   memory: "256MB",
 }).database
   .ref("/trips/{tripId}")
-  .onCreate(async (snapshot: admin.database.DataSnapshot, context: functions.EventContext) => {
+  .onWrite(async (
+    change: functions.Change<admin.database.DataSnapshot>,
+    context: functions.EventContext,
+  ) => {
+    const snapshot = change.after;
     const tripId = context.params.tripId;
     const trip = snapshot.val() as Record<string, any>;
 
-    console.log(`[START] Processing new trip: ${tripId}`);
-    if (!trip || trip.status !== "pending") {
-      console.log(`[EXIT] Trip ${tripId} status is not pending or data is missing.`);
+    // Dispatch when the trip first becomes offerable. This covers cash trips
+    // created as pending and digital trips that become pending after payment.
+    const previousStatus = change.before.child("status").val();
+    const currentStatus = change.after.child("status").val();
+    console.log(`[onTripCreated][${tripId}][TRIGGER] Alteração recebida. Estado anterior=${previousStatus ?? "ausente"}; estado atual=${currentStatus ?? "ausente"}.`);
+
+    if (previousStatus === "pending") {
+      console.log(`[onTripCreated][${tripId}][IGNORADO] A viagem já estava pending antes desta alteração; não é uma nova oferta.`);
       return;
     }
+    if (!trip || trip.status !== "pending") {
+      console.log(`[onTripCreated][${tripId}][IGNORADO] A viagem não está pronta para despacho: status=${trip?.status ?? "sem dados"}. Esperado: pending.`);
+      return;
+    }
+    console.log(`[onTripCreated][${tripId}][INÍCIO] Viagem elegível para despacho. Categoria=${trip.carCategory ?? "economico (padrão)"}; passageiro=${trip.passenger ?? "ausente"}.`);
 
     // Marks when the trip actually became available to drivers — used to
     // compute acceptance rate / time-to-accept metrics. Cash trips are
@@ -71,53 +197,90 @@ export const onTripCreated = functions.runWith({
     // onTripStatusChanged case below), so offeredAt genuinely lags createdAt.
     if (!trip.offeredAt) {
       await db.ref(`trips/${tripId}/offeredAt`).set(new Date().toISOString());
+      console.log(`[onTripCreated][${tripId}][REGISTO] offeredAt gravado.`);
     }
 
     // 1. Get pickup coordinates
     const origin = trip.origin as Record<string, any>;
+    const requestedCategory = typeof trip.carCategory === "string" ? trip.carCategory : "economico";
     if (!origin || typeof origin.lat !== "number" || typeof origin.lng !== "number") {
-      console.log(`[ERROR] Trip ${tripId} has invalid origin coordinates.`);
+      console.error(`[onTripCreated][${tripId}][ERRO] Origem inválida. São necessárias coordenadas numéricas lat/lng.`);
       return;
     }
+    console.log(`[onTripCreated][${tripId}][ORIGEM] Coordenadas válidas.`);
 
     // 2. Find online drivers
-    console.log("[STEP] Fetching online drivers...");
+    console.log(`[onTripCreated][${tripId}][BUSCA] A procurar motoristas com online=true.`);
     const driversSnap = await db.ref("drivers").orderByChild("online").equalTo(true).get();
     if (!driversSnap.exists()) {
-      console.log("[EXIT] No online drivers found in database.");
+      console.log(`[onTripCreated][${tripId}][SEM CANDIDATOS] Não há motoristas online em /drivers.`);
+      if (typeof trip.passenger === "string") {
+        await markNoDriverAvailable(tripId, trip.passenger);
+      }
       return;
     }
 
     // 3. Calculate distances and sort
-    const potentialDrivers: any[] = [];
+    const onlineDrivers: Array<{
+      uid: string;
+      location: Record<string, any>;
+    }> = [];
+    let skippedBusy = 0;
+    let skippedCategory = 0;
+    let skippedLocation = 0;
     driversSnap.forEach((child) => {
       const driverData = child.val() as Record<string, any>;
       
       // Skip drivers who are busy in an active trip
       if (driverData.busy === true) {
+        skippedBusy++;
+        return;
+      }
+
+      if (!vehicleSupportsCategory(driverData, requestedCategory)) {
+        skippedCategory++;
         return;
       }
       
       const location = driverData.location;
       
-      if (location && typeof location.lat === "number" && typeof location.lng === "number") {
-        const dist = calculateDistance(origin.lat, origin.lng, location.lat, location.lng);
-        potentialDrivers.push({
+      if (
+        child.key &&
+        location &&
+        typeof location.lat === "number" &&
+        typeof location.lng === "number"
+      ) {
+        onlineDrivers.push({
           uid: child.key,
           location: location,
-          distance: dist,
         });
+      } else {
+        skippedLocation++;
       }
     });
+    console.log(`[onTripCreated][${tripId}][FILTRO] Online analisados=${driversSnap.numChildren()}; ocupados=${skippedBusy}; categoria incompatível=${skippedCategory}; localização inválida/ausente=${skippedLocation}; compatíveis=${onlineDrivers.length}.`);
+
+    const potentialDrivers = onlineDrivers.map((driver) => ({
+      ...driver,
+      distance: calculateDistance(
+        origin.lat,
+        origin.lng,
+        driver.location.lat,
+        driver.location.lng,
+      ),
+    }));
 
     if (potentialDrivers.length === 0) {
-      console.log("[EXIT] No drivers with valid locations found.");
+      console.log(`[onTripCreated][${tripId}][SEM CANDIDATOS] Nenhum motorista online, livre, compatível com ${requestedCategory} e com localização válida.`);
+      if (typeof trip.passenger === "string") {
+        await markNoDriverAvailable(tripId, trip.passenger);
+      }
       return;
     }
 
     // Sort by distance ascending
     potentialDrivers.sort((a, b) => a.distance - b.distance);
-    console.log(`[INFO] Found ${potentialDrivers.length} nearby drivers. Sorted by proximity.`);
+    console.log(`[onTripCreated][${tripId}][PROXIMIDADE] ${potentialDrivers.length} candidatos ordenados por distância. Mais próximo=${potentialDrivers[0].uid} (${potentialDrivers[0].distance.toFixed(2)} km).`);
 
     // 4. Sequential notification loop
     // Notify top 10 closest drivers one by one
@@ -133,17 +296,24 @@ export const onTripCreated = functions.runWith({
       const currentStatus = currentTripSnap.val();
       
       if (currentStatus !== "pending") {
-        console.log(`[STOP] Trip ${tripId} is no longer pending (current status: ${currentStatus}). Ending loop.`);
+        console.log(`[onTripCreated][${tripId}][PARAGEM] Estado mudou para ${currentStatus ?? "ausente"} antes da próxima oferta.`);
         break;
       }
 
-      console.log(`[PROXIMITY] ${i + 1}/${driversToNotify.length}: Attempting to notify driver ${driver.uid} (Distance: ${driver.distance.toFixed(2)} km)`);
+      console.log(`[onTripCreated][${tripId}][MOTORISTA ${i + 1}/${driversToNotify.length}] A verificar ${driver.uid}; distância=${driver.distance.toFixed(2)} km.`);
 
       const token = await getFcmToken(driver.uid);
       if (!token) {
-        console.log(`[SKIP] Driver ${driver.uid} has no FCM token.`);
+        console.log(`[onTripCreated][${tripId}][TOKEN AUSENTE] Motorista ${driver.uid} não tem /users/${driver.uid}/fcmToken; será ignorado.`);
         continue;
       }
+      console.log(`[onTripCreated][${tripId}][TOKEN OK] Token FCM encontrado para ${driver.uid} (valor ocultado).`);
+
+      if (!(await setOfferedDriver(tripId, driver.uid))) {
+        console.log(`[onTripCreated][${tripId}][PARAGEM] Não foi possível gravar offeredTo=${driver.uid}; a viagem deixou de estar disponível.`);
+        break;
+      }
+      console.log(`[onTripCreated][${tripId}][OFERTA ATRIBUÍDA] offeredTo=${driver.uid}. A enviar FCM.`);
 
       try {
         await messaging.send({
@@ -164,31 +334,43 @@ export const onTripCreated = functions.runWith({
             payload: { aps: { sound: "default", badge: 1 } },
           },
         });
+      } catch (err) {
+        console.error(`[onTripCreated][${tripId}][ERRO FCM] Falha ao enviar para ${driver.uid}:`, err);
+        await clearOfferedDriver(tripId, driver.uid);
+        console.log(`[onTripCreated][${tripId}][OFERTA LIMPA] offeredTo removido após falha FCM; será tentado o próximo motorista.`);
+        continue;
+      }
+      try {
         await recordNotification(db, driver.uid, {
           title: "Nova Viagem Disponível!",
           body: `De: ${originName} → ${destName}`,
           type: "new_trip",
           tripId,
         });
-        console.log(`[SUCCESS] Notification sent to driver ${driver.uid}.`);
       } catch (err) {
-        console.error(`[ERROR] Failed to send notification to driver ${driver.uid}:`, err);
-        continue;
+        console.error(`[onTripCreated][${tripId}][ERRO HISTÓRICO] FCM enviado, mas não foi possível guardar a notificação de ${driver.uid}:`, err);
       }
+      console.log(`[onTripCreated][${tripId}][FCM ENVIADO] Oferta enviada ao FCM para ${driver.uid}. Isto confirma aceitação pelo FCM, não reprodução no telefone.`);
 
       // Wait 20 seconds for this driver to accept
-      console.log(`[WAIT] Waiting 20 seconds for response from ${driver.uid}...`);
+      console.log(`[onTripCreated][${tripId}][AGUARDA ACEITAÇÃO] A aguardar até 20 segundos pela resposta de ${driver.uid}.`);
       const isAccepted = await waitForAcceptance(tripId, 20);
       
       if (isAccepted) {
-        console.log(`[ACCEPTED] Driver ${driver.uid} accepted the trip ${tripId}.`);
+        console.log(`[onTripCreated][${tripId}][ACEITE] Motorista ${driver.uid} aceitou a viagem.`);
         return;
       } else {
-        console.log(`[TIMEOUT] Driver ${driver.uid} did not respond within 20s.`);
+        const statusAfterWait = (await db.ref(`trips/${tripId}/status`).get()).val();
+        console.log(`[onTripCreated][${tripId}][SEM RESPOSTA] ${driver.uid} não aceitou em 20 segundos; estado atual=${statusAfterWait ?? "ausente"}.`);
+        await clearOfferedDriver(tripId, driver.uid);
+        console.log(`[onTripCreated][${tripId}][OFERTA EXPIRADA] offeredTo limpo para ${driver.uid}; será tentado o próximo candidato.`);
       }
     }
 
-    console.log(`[END] Notification sequence finished for trip ${tripId}. No driver accepted.`);
+    console.log(`[onTripCreated][${tripId}][FIM] Terminaram as tentativas para os candidatos disponíveis sem aceitação.`);
+    if (typeof trip.passenger === "string") {
+      await markNoDriverAvailable(tripId, trip.passenger);
+    }
   });
 
 /**

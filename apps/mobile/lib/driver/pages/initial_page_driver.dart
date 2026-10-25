@@ -52,7 +52,9 @@ class _DriverHomePageState extends State<DriverHomePage>
         debugPrint("NEW TRIP RECEIVED: $tripId, online: ${appState.isOnline}");
         if (appState.isOnline) {
           appState.handleNewTripRequest(tripId);
+          return true;
         }
+        return false;
       };
     });
     _animatedMapController = AnimatedMapController(vsync: this);

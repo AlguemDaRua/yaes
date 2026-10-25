@@ -91,11 +91,6 @@ class _DriverDetailPageState extends ConsumerState<DriverDetailPage> {
 
   Widget _buildDetail(BuildContext context, _DriverData d) {
     final status = YaStatus.fromDriverStatus(d.status, online: d.online);
-    final partnerName = (d.partner == '-' || d.partner.isEmpty)
-        ? '—'
-        : (ref.watch(adminPartnerByIdProvider(d.partner)).asData?.value?.name ??
-            d.partner);
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -103,7 +98,8 @@ class _DriverDetailPageState extends ConsumerState<DriverDetailPage> {
           name: d.name,
           statusBadge: StatusBadge.fromMapping(status),
           subtitle: '${d.phone} · ${d.email}',
-          meta: 'Partner: $partnerName',
+          meta:
+              'Categorias: ${d.categories.isEmpty ? 'por configurar' : d.categories.join(', ')}',
           breadcrumb: _Breadcrumb(
             onBack: () => context.go('/admin/drivers'),
             name: d.name,
@@ -204,7 +200,8 @@ class _TabDriverCarteira extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final partner = ref.watch(adminPartnerByIdProvider(partnerId)).asData?.value;
+    final partner =
+        ref.watch(adminPartnerByIdProvider(partnerId)).asData?.value;
     if (partner == null || !partner.requiresWalletSettlement) {
       return const EmptyState(
         icon: LucideIcons.wallet,
@@ -319,8 +316,11 @@ class _CarteiraContent extends ConsumerWidget {
               align: Alignment.centerRight,
               cellBuilder: (e) => Text(
                 '${e.amountMtn > 0 ? '+' : ''}${moneyFormat.format(e.amountMtn)} MTn',
-                style: YaText.mono(size: 13, height: 18, weight: FontWeight.w500)
-                    .copyWith(color: e.amountMtn < 0 ? colors.danger : colors.success),
+                style:
+                    YaText.mono(size: 13, height: 18, weight: FontWeight.w500)
+                        .copyWith(
+                  color: e.amountMtn < 0 ? colors.danger : colors.success,
+                ),
               ),
             ),
             YaColumn(
@@ -370,7 +370,11 @@ class _AdjustWalletDialogState extends ConsumerState<_AdjustWalletDialog> {
     if (_busy) return;
     final int? value = int.tryParse(_amount.text.trim());
     if (value == null || value <= 0) {
-      yaSnack(context, 'Indica um valor válido.', variant: StatusVariant.danger);
+      yaSnack(
+        context,
+        'Indica um valor válido.',
+        variant: StatusVariant.danger,
+      );
       return;
     }
     setState(() => _busy = true);
@@ -448,12 +452,48 @@ class _AdjustWalletDialogState extends ConsumerState<_AdjustWalletDialog> {
   }
 }
 
-class _TabDriverGeral extends StatelessWidget {
+class _TabDriverGeral extends ConsumerStatefulWidget {
   const _TabDriverGeral({required this.d});
   final _DriverData d;
 
   @override
+  ConsumerState<_TabDriverGeral> createState() => _TabDriverGeralState();
+}
+
+class _TabDriverGeralState extends ConsumerState<_TabDriverGeral> {
+  static const Map<String, String> _categoryLabels = <String, String>{
+    'economico': 'Económico',
+    'confort': 'Confort',
+    'txopela': 'Txopela',
+    'moto': 'Moto',
+  };
+  late final Set<String> _categories = widget.d.categories.toSet();
+  bool _saving = false;
+
+  Future<void> _save() async {
+    if (_saving || _categories.isEmpty) return;
+    setState(() => _saving = true);
+    try {
+      await ref.read(cloudFunctionsServiceProvider).setDriverCategories(
+            uid: widget.d.id,
+            categories: _categories.toList(),
+          );
+      if (!mounted) return;
+      ref.invalidate(adminDriverByIdProvider(widget.d.id));
+      ref.invalidate(adminDriversProvider);
+      yaSnack(context, 'Categorias do motorista actualizadas');
+    } catch (error) {
+      if (mounted) {
+        yaSnack(context, 'Erro: $error', variant: StatusVariant.danger);
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final d = widget.d;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -480,6 +520,39 @@ class _TabDriverGeral extends StatelessWidget {
               icon: LucideIcons.clock,
             ),
           ],
+        ),
+        const SizedBox(height: YaSpacing.xl),
+        Text('Tipos de viatura que este motorista atende', style: YaText.md),
+        const SizedBox(height: YaSpacing.sm),
+        Text(
+          'As categorias são guardadas directamente em /drivers e usadas para o matching por proximidade.',
+          style: YaText.sm.copyWith(color: YaColors.of(context).textMuted),
+        ),
+        const SizedBox(height: YaSpacing.md),
+        Wrap(
+          spacing: YaSpacing.md,
+          runSpacing: YaSpacing.sm,
+          children: _categoryLabels.entries.map((entry) {
+            return FilterChip(
+              label: Text(entry.value),
+              selected: _categories.contains(entry.key),
+              onSelected: _saving
+                  ? null
+                  : (selected) => setState(() {
+                        if (selected) {
+                          _categories.add(entry.key);
+                        } else if (_categories.length > 1) {
+                          _categories.remove(entry.key);
+                        }
+                      }),
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: YaSpacing.md),
+        YaButton.primary(
+          label: _saving ? 'A guardar…' : 'Guardar categorias',
+          icon: LucideIcons.save,
+          onPressed: _saving || _categories.isEmpty ? null : _save,
         ),
       ],
     );
@@ -623,6 +696,7 @@ class _DriverData {
     required this.phone,
     required this.email,
     required this.partner,
+    required this.categories,
     required this.status,
     required this.online,
     required this.totalTrips,
@@ -631,6 +705,7 @@ class _DriverData {
     required this.lastActive,
   });
   final String id, name, phone, email, partner, status, totalEarned, lastActive;
+  final List<String> categories;
   final bool online;
   final int totalTrips;
   final double rating;
@@ -651,6 +726,7 @@ class _DriverData {
       phone: driver.phone ?? '-',
       email: driver.email ?? '-',
       partner: driver.partnerId ?? '-',
+      categories: driver.categories,
       status: driver.status,
       online: driver.online,
       totalTrips: driver.tripsCount > 0 ? driver.tripsCount : completed.length,

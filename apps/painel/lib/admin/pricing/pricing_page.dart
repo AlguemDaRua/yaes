@@ -108,6 +108,12 @@ const Map<String, Map<String, Object>> _categoryDefaults = {
     'seats': 5,
     'order': 2,
   },
+  'confort': {
+    'label': 'Confort',
+    'multiplier': 1.35,
+    'seats': 5,
+    'order': 3,
+  },
   'sedan': {'label': 'Sedan', 'multiplier': 1.6, 'seats': 5, 'order': 2},
   'caravan': {'label': 'Caravan', 'multiplier': 1.5, 'seats': 9, 'order': 3},
   'suv': {'label': 'SUV', 'multiplier': 2.0, 'seats': 7, 'order': 4},
@@ -163,7 +169,7 @@ class _PricingFormState extends ConsumerState<_PricingForm> {
       };
     }
     final categories = _asMap(widget.config['categories']);
-    final source = categories.isEmpty ? _categoryDefaults : categories;
+    final source = <String, dynamic>{..._categoryDefaults, ...categories};
     for (final entry in source.entries) {
       final stored = _asMap(entry.value);
       _catCtrl[entry.key] = {

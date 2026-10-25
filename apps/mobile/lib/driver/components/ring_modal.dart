@@ -178,6 +178,13 @@ class RingModal extends StatelessWidget {
     final originName = trip?['origin']?['name'] ?? "Local de recolha";
     final destName = trip?['destination']?['name'] ?? "Destino";
     final price = trip?['estimatedPrice']?.toString() ?? "---";
+    final categoryName = switch (trip?['carCategory']?.toString()) {
+      'economico' => 'Económico',
+      'confort' => 'Confort',
+      'txopela' => 'Txopela',
+      'moto' => 'Moto',
+      _ => 'Económico',
+    };
     // TODO: Fetch calculated distance/duration if not in trip object
     final stats = "7 km • 15 min";
 
@@ -224,6 +231,16 @@ class RingModal extends StatelessWidget {
 
             SizedBox(height: 12.sp),
             const CountdownBar(duration: 15),
+
+            SizedBox(height: 8.sp),
+            Text(
+              'Categoria solicitada: $categoryName',
+              style: TextStyle(
+                color: Colors.amber.shade200,
+                fontSize: 13.sp,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
 
             SizedBox(height: 20.sp),
 

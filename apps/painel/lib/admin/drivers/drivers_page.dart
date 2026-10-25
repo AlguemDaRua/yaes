@@ -109,8 +109,7 @@ class _DriversPageState extends ConsumerState<DriversPage> {
           children: [
             PageHeader(
               title: S.of(context).adminDriversTitle,
-              description: 'Motoristas registados na plataforma. O onboarding '
-                  'de drivers faz-se na frota do partner.',
+              description: 'Motoristas registados directamente na plataforma.',
             ),
             const SizedBox(height: YaSpacing.xxl),
             KpiRow(
@@ -142,7 +141,7 @@ class _DriversPageState extends ConsumerState<DriversPage> {
               chips: _chipsFor(rows),
               activeChipId: _activeChip,
               onChipSelected: (id) => setState(() => _activeChip = id),
-              searchPlaceholder: 'Pesquisar por nome, telefone ou partner...',
+              searchPlaceholder: 'Pesquisar por nome ou telefone...',
             ),
             const SizedBox(height: YaSpacing.lg),
             YaDataTable<_Driver>(
@@ -155,12 +154,6 @@ class _DriversPageState extends ConsumerState<DriversPage> {
                     name: row.name,
                     subtitle: row.phone,
                   ),
-                ),
-                YaColumn(
-                  key: 'partner',
-                  label: 'Partner',
-                  width: 160,
-                  cellBuilder: (row) => TextCell(row.partner, muted: true),
                 ),
                 YaColumn(
                   key: 'status',
@@ -247,7 +240,6 @@ class _Driver {
     this.id,
     this.name,
     this.phone,
-    this.partner,
     this.status,
     this.online,
     this.rating,
@@ -259,7 +251,6 @@ class _Driver {
   final String id;
   final String name;
   final String phone;
-  final String partner;
   final String status;
   final bool online;
   final String rating;
@@ -272,7 +263,6 @@ class _Driver {
       driver.id,
       driver.name,
       driver.phone ?? '-',
-      driver.partnerId ?? '-',
       driver.status,
       driver.online,
       driver.rating.toStringAsFixed(2).replaceAll('.', ','),

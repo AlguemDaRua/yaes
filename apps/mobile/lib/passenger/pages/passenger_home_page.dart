@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_animations/flutter_map_animations.dart';
@@ -28,6 +29,11 @@ import 'package:limousineexecutive/passenger/controllers/route_controller.dart';
 import 'package:limousineexecutive/driver/components/vehicle_marker.dart'; // Import the new widget
 import 'package:limousineexecutive/shared/widgets/map_compass_button.dart';
 import 'package:provider/provider.dart';
+
+const bool _testSkipDigitalPayment = bool.fromEnvironment(
+  'YA_TEST_SKIP_DIGITAL_PAYMENT',
+  defaultValue: kDebugMode,
+);
 
 class PassengerHomePage extends StatefulWidget {
   const PassengerHomePage({super.key});
@@ -226,7 +232,8 @@ class _PassengerHomePageState extends State<PassengerHomePage>
                   ),
 
                 // Online drivers (nearby cars) - Hide them when an active driver is being tracked
-                if (appState.onlineDrivers.isNotEmpty && appState.driverLocation == null)
+                if (appState.onlineDrivers.isNotEmpty &&
+                    appState.driverLocation == null)
                   AnimatedMarkerLayer(
                     markers: appState.onlineDrivers.map((driver) {
                       final loc = driver['location'] as Map<dynamic, dynamic>?;
@@ -399,9 +406,17 @@ class _PassengerHomePageState extends State<PassengerHomePage>
                         top: 0,
                         right: 2.sp,
                         child: StreamBuilder<List<Map<String, dynamic>>>(
-                          stream: Provider.of<ITripRepository>(context, listen: false).readSchedules(
-                            Provider.of<IAuthRepository>(context, listen: false).currentUser?.uid ?? '',
-                          ),
+                          stream:
+                              Provider.of<ITripRepository>(
+                                context,
+                                listen: false,
+                              ).readSchedules(
+                                Provider.of<IAuthRepository>(
+                                      context,
+                                      listen: false,
+                                    ).currentUser?.uid ??
+                                    '',
+                              ),
                           builder: (context, snapshot) {
                             final count = snapshot.data?.length ?? 0;
                             return Container(
@@ -469,7 +484,8 @@ class _PassengerHomePageState extends State<PassengerHomePage>
             AnimatedPositioned(
               duration: const Duration(milliseconds: 250),
               curve: Curves.easeInOut,
-              top: MediaQuery.of(context).padding.top +
+              top:
+                  MediaQuery.of(context).padding.top +
                   (appState.showRoute ? 125.sp : 70.sp),
               right: 18.sp,
               child: MapCompassButton(
@@ -591,8 +607,6 @@ class _PassengerHomePageState extends State<PassengerHomePage>
     );
   }
 
-
-
   Future<void> _promptRating(String tripId) async {
     await showRateDriverDialog(context, tripId: tripId);
     if (!mounted) return;
@@ -712,7 +726,7 @@ class _PassengerHomePageState extends State<PassengerHomePage>
     final tripRepo = Provider.of<ITripRepository>(context, listen: false);
     final uid = authRepo.currentUser?.uid;
     if (uid == null) return;
- 
+
     final profile = await tripRepo.watchProfile(uid).first;
     final name = profile?['name'] ?? '';
 
@@ -847,8 +861,14 @@ class _PassengerHomePageState extends State<PassengerHomePage>
                   GestureDetector(
                     onTap: () async {
                       if (formKey.currentState!.validate()) {
-                        final authRepo = Provider.of<IAuthRepository>(context, listen: false);
-                        final tripRepo = Provider.of<ITripRepository>(context, listen: false);
+                        final authRepo = Provider.of<IAuthRepository>(
+                          context,
+                          listen: false,
+                        );
+                        final tripRepo = Provider.of<ITripRepository>(
+                          context,
+                          listen: false,
+                        );
                         final uid = authRepo.currentUser?.uid;
                         if (uid != null) {
                           await tripRepo.updateProfile(uid, {
@@ -935,7 +955,9 @@ class _PassengerHomePageState extends State<PassengerHomePage>
       // held in 'awaiting_payment' (drivers only see 'pending') until the PSP
       // confirms the collection.
       final method = appState.paymentMethod ?? 'cash';
-      final isDigital = method == 'mpesa' || method == 'emola';
+      final usesDigitalPayment = method == 'mpesa' || method == 'emola';
+      final skipPaymentForTest = _testSkipDigitalPayment && usesDigitalPayment;
+      final requiresPayment = usesDigitalPayment && !skipPaymentForTest;
 
       final tripId = await tripRepo.createTrip(
         passengerUid: uid,
@@ -955,7 +977,7 @@ class _PassengerHomePageState extends State<PassengerHomePage>
         tripType: 'regular',
         distanceKm: appState.distanceKm,
         durationMinutes: appState.durationMin.toDouble(),
-        status: isDigital ? 'awaiting_payment' : 'pending',
+        status: requiresPayment ? 'awaiting_payment' : 'pending',
         carCategory: category,
       );
 
@@ -964,7 +986,7 @@ class _PassengerHomePageState extends State<PassengerHomePage>
 
       // 2b. Pre-paid digital flow: charge and wait for confirmation before the
       // trip becomes available to drivers.
-      if (isDigital) {
+      if (requiresPayment) {
         appState.tripStatus = 'awaiting_payment';
         await PaymentService.initiate(tripId: tripId, method: method);
         if (mounted) {
@@ -992,6 +1014,12 @@ class _PassengerHomePageState extends State<PassengerHomePage>
         }
         // Payment confirmed → release the trip to drivers.
         await tripRepo.updateTripStatus(tripId, 'pending');
+      } else if (skipPaymentForTest && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Teste: viagem enviada sem cobrança digital.'),
+          ),
+        );
       }
 
       appState.tripStatus = 'pending';
@@ -1015,8 +1043,10 @@ class _PassengerHomePageState extends State<PassengerHomePage>
         appState.tripStatus = 'cancelled';
         final tripId = appState.currentTripId;
         if (tripId != null) {
-          Provider.of<ITripRepository>(context, listen: false)
-              .updateTripStatus(tripId, 'cancelled');
+          Provider.of<ITripRepository>(
+            context,
+            listen: false,
+          ).updateTripStatus(tripId, 'cancelled');
           appState.currentTripId = null;
         }
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1032,10 +1062,13 @@ class _PassengerHomePageState extends State<PassengerHomePage>
   /// Returns true only when paid; times out (treated as not paid) after 2 min.
   Future<bool> _awaitPayment(ITripRepository tripRepo, String tripId) async {
     try {
-      final trip = await tripRepo.watchTrip(tripId).firstWhere((t) {
-        final status = t?['paymentStatus'];
-        return status == 'paid' || status == 'failed';
-      }).timeout(const Duration(seconds: 120));
+      final trip = await tripRepo
+          .watchTrip(tripId)
+          .firstWhere((t) {
+            final status = t?['paymentStatus'];
+            return status == 'paid' || status == 'failed';
+          })
+          .timeout(const Duration(seconds: 120));
       return trip?['paymentStatus'] == 'paid';
     } catch (_) {
       return false;
@@ -1093,7 +1126,9 @@ class _PulsingCircleState extends State<PulsingCircle>
           width: widget.size,
           height: widget.size,
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.3 + (_controller.value * 0.4)),
+            color: Colors.white.withValues(
+              alpha: 0.3 + (_controller.value * 0.4),
+            ),
             shape: BoxShape.circle,
             boxShadow: [
               BoxShadow(

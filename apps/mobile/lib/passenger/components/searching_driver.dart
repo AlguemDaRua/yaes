@@ -1,20 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:limousineexecutive/passenger/models/cardata.dart';
 
 class SearchingDriver extends StatelessWidget {
-  const SearchingDriver({super.key, this.category = 'economico'});
-
-  final String category;
-
-  String get _categoryName => switch (category) {
-    'economico' => 'Económico',
-    'confort' => 'Confort',
-    'txopela' => 'Txopela',
-    'moto' => 'Moto',
-    _ => 'Viatura',
-  };
+  const SearchingDriver({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -29,23 +18,6 @@ class SearchingDriver extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Container(
-            width: 58.w,
-            height: 58.w,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: const Color(0xFFFFF8DF),
-              borderRadius: BorderRadius.circular(18.r),
-            ),
-            child: ExcludeSemantics(
-              child: Icon(
-                CarData.categoryIcon(category),
-                size: 31.sp,
-                color: const Color(0xFF202520),
-              ),
-            ),
-          ),
-          SizedBox(width: 14.w),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -62,7 +34,7 @@ class SearchingDriver extends StatelessWidget {
                 ),
                 SizedBox(height: 3.h),
                 Text(
-                  'Categoria $_categoryName · a contactar motoristas próximos',
+                  'A contactar motoristas próximos',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.poppins(

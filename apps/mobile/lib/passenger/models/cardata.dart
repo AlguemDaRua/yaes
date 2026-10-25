@@ -19,6 +19,8 @@ class CarData {
       case "Econômico":
       case "Económico":
         return "economico";
+      case "Confort":
+        return "confort";
       case "Sedan":
         return "sedan";
       case "Caravan":

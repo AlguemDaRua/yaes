@@ -39,6 +39,7 @@ class AdminDriver {
     this.phone,
     this.email,
     this.vehicleId,
+    this.categories = const <String>[],
     this.rating = 0,
     this.tripsCount = 0,
   });
@@ -51,6 +52,7 @@ class AdminDriver {
   final String? phone;
   final String? email;
   final String? vehicleId;
+  final List<String> categories;
   final double rating;
   final int tripsCount;
 }
@@ -66,6 +68,7 @@ class AdminVehicle {
     this.driverId,
     this.year,
     this.category,
+    this.categories = const <String>[],
     this.seats,
     this.photoUrl,
     this.color,
@@ -83,6 +86,7 @@ class AdminVehicle {
   /// Categoria de preço (economico/conforto/premium/van) — liga o veículo
   /// ao tarifário e ao que o passageiro escolhe.
   final String? category;
+  final List<String> categories;
   final int? seats;
   final String? photoUrl;
   final String? color;

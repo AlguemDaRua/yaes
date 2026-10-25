@@ -13,6 +13,7 @@ export {
 export {setUserType} from "./drivers";
 export {
   setUserRole,
+  setDriverCategories,
   createPartner,
   approvePartner,
   suspendPartner,

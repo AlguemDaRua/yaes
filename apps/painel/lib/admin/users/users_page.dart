@@ -52,7 +52,11 @@ class _UsersPageState extends ConsumerState<UsersPage> {
 
   void _copyPhone(String? phone) {
     if (phone == null || phone.isEmpty || phone == '-') {
-      yaSnack(context, 'Sem telefone para copiar', variant: StatusVariant.warning);
+      yaSnack(
+        context,
+        'Sem telefone para copiar',
+        variant: StatusVariant.warning,
+      );
       return;
     }
     Clipboard.setData(ClipboardData(text: phone));
@@ -385,17 +389,22 @@ class _InviteManagerDialogState extends ConsumerState<_InviteManagerDialog> {
     if (_busy) return;
     final String email = _email.text.trim();
     if (email.isEmpty || !email.contains('@')) {
-      yaSnack(context, 'Indica um email válido.', variant: StatusVariant.danger);
+      yaSnack(
+        context,
+        'Indica um email válido.',
+        variant: StatusVariant.danger,
+      );
       return;
     }
     setState(() => _busy = true);
     try {
       final String name = _name.text.trim();
-      final result = await ref.read(cloudFunctionsServiceProvider).inviteManager(
-            email: email,
-            role: _role,
-            name: name.isEmpty ? null : name,
-          );
+      final result =
+          await ref.read(cloudFunctionsServiceProvider).inviteManager(
+                email: email,
+                role: _role,
+                name: name.isEmpty ? null : name,
+              );
       if (!mounted) return;
       ref.invalidate(adminUsersProvider);
       Navigator.of(context).pop();
@@ -443,6 +452,7 @@ class _InviteManagerDialogState extends ConsumerState<_InviteManagerDialog> {
             items: const <YaSelectItem<String>>[
               YaSelectItem<String>(value: 'support', label: 'Suporte'),
               YaSelectItem<String>(value: 'admin', label: 'Admin'),
+              YaSelectItem<String>(value: 'driver', label: 'Motorista'),
             ],
             value: _role,
             onChanged: (String value) => setState(() => _role = value),
@@ -502,7 +512,11 @@ class _EditRoleDialog extends ConsumerStatefulWidget {
 }
 
 class _EditRoleDialogState extends ConsumerState<_EditRoleDialog> {
-  late String _role = widget.user.type == 'admin' ? 'admin' : 'support';
+  late String _role = switch (widget.user.type) {
+    'admin' => 'admin',
+    'driver' => 'driver',
+    _ => 'support',
+  };
   bool _busy = false;
 
   Future<void> _submit() async {
@@ -526,8 +540,7 @@ class _EditRoleDialogState extends ConsumerState<_EditRoleDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final String who =
-        widget.user.email ?? widget.user.name ?? widget.user.id;
+    final String who = widget.user.email ?? widget.user.name ?? widget.user.id;
     return FormDialog(
       title: 'Editar role',
       description: 'Altera o nível de acesso de $who.',

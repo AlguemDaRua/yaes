@@ -63,7 +63,14 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 /// (status updates on their trip) push to the passenger home.
 void _handleNotificationTap(NotificationPayload payload) {
   final context = navigatorKey.currentContext;
-  if (context == null) return;
+  if (context == null) {
+    // The terminated-app notification can be delivered before runApp builds
+    // the Navigator. Retry after the first frame instead of dropping the trip.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _handleNotificationTap(payload);
+    });
+    return;
+  }
 
   switch (payload.type) {
     case 'new_trip':

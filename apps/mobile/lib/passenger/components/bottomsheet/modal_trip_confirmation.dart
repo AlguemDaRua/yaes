@@ -190,7 +190,7 @@ Future<bool?> showTripConfirmationModal(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          'Veículo',
+                          'Categoria',
                           style: GoogleFonts.poppins(
                             fontSize: 13.sp,
                             color: Colors.grey,

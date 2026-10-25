@@ -1,5 +1,6 @@
 import {
   setUserRoleCore,
+  setDriverCategoriesCore,
   createPartnerCore,
   setPartnerStatusCore,
   processPayoutCore,
@@ -46,11 +47,10 @@ describe("setUserRoleCore", () => {
     );
   });
 
-  test("driver role requires partnerId", async () => {
-    await expectHttpsError(
-      setUserRoleCore(db(ADMIN), "admin-uid", {uid: "u1", role: "driver"}),
-      "invalid-argument"
-    );
+  test("allows a driver role without partner association", async () => {
+    const d = db(ADMIN);
+    await setUserRoleCore(d, "admin-uid", {uid: "u1", role: "driver"});
+    expect(d.store.users.u1).toEqual({type: "driver"});
   });
 
   test("sets type and partnerId for a driver", async () => {
@@ -68,6 +68,36 @@ describe("setUserRoleCore", () => {
     const d = db(ADMIN);
     await setUserRoleCore(d, "admin-uid", {uid: "u2", role: "support"});
     expect(d.store.users.u2).toEqual({type: "support"});
+  });
+});
+
+describe("setDriverCategoriesCore", () => {
+  test("stores selected categories directly in the driver node", async () => {
+    const d = db({...ADMIN, users: {driver1: {type: "driver"}}});
+    const result = await setDriverCategoriesCore(d, "admin-uid", {
+      uid: "driver1",
+      categories: ["economico", "txopela", "economico"],
+    });
+    expect(result.categories).toEqual(["economico", "txopela"]);
+    expect(d.store.drivers.driver1).toMatchObject({
+      category: "economico",
+      categories: {economico: true, txopela: true},
+    });
+  });
+
+  test("rejects empty and unsupported categories", async () => {
+    const d = db({...ADMIN, users: {driver1: {type: "driver"}}});
+    await expectHttpsError(
+      setDriverCategoriesCore(d, "admin-uid", {uid: "driver1", categories: []}),
+      "invalid-argument"
+    );
+    await expectHttpsError(
+      setDriverCategoriesCore(d, "admin-uid", {
+        uid: "driver1",
+        categories: ["premium"],
+      }),
+      "invalid-argument"
+    );
   });
 });
 

@@ -145,7 +145,8 @@ class _SearchModalState extends State<SearchModal> {
                       await Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => const PickLocationOnMap(text: 'Stop'),
+                          builder: (context) =>
+                              const PickLocationOnMap(text: 'Stop'),
                         ),
                       );
                       if (!context.mounted) return;
@@ -325,7 +326,7 @@ class _SearchModalState extends State<SearchModal> {
         ReorderableListView(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          onReorderItem: (oldIndex, newIndex) {
+          onReorder: (oldIndex, newIndex) {
             setState(() {
               final item = appState.removeStopAt(oldIndex);
               if (item != null) appState.insertStop(newIndex, item);
