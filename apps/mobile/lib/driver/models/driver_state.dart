@@ -191,12 +191,16 @@ class DriverState extends ChangeNotifier {
       }
 
       final status = tripData['status']?.toString() ?? '';
-      
+
       // Update local data
       _currentTripData = tripData;
 
       if (status == 'completed' || status == 'cancelled') {
+        final wasOnTrip = _isOnTrip;
         endTrip();
+        if (status == 'completed' && wasOnTrip) {
+          unawaited(ensureOnlineAfterTrip());
+        }
       } else {
         _isTripStarted = (status == 'started');
         _isOnTrip = true; // Ensure it stays true
@@ -217,6 +221,22 @@ class DriverState extends ChangeNotifier {
     _tripSubscription?.cancel();
     _tripSubscription = null;
     notifyListeners();
+  }
+
+  /// Reasserts the driver's online presence after a completed trip.
+  /// RTDB's onDisconnect handler can mark /drivers/{uid}/online false during
+  /// a temporary connection loss; the local switch may still show online.
+  Future<void> ensureOnlineAfterTrip() async {
+    if (!_isOnline || isWalletBlocked) return;
+    final uid = _authRepository.currentUser?.uid;
+    if (uid == null) return;
+
+    try {
+      await _tripRepository.setOnlineStatus(uid, true);
+      debugPrint('[TRIP COMPLETED] Online status restored for driver $uid.');
+    } catch (error) {
+      debugPrint('[TRIP COMPLETED] Failed to restore online status: $error');
+    }
   }
 
   /// Handles an incoming trip request ID from FCM by fetching the real data
