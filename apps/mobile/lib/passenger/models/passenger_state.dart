@@ -378,6 +378,10 @@ class PassengerState extends ChangeNotifier {
     _tripSubscription = _tripRepository.watchTrip(tripId).listen((trip) {
       if (trip != null) {
         final newStatus = trip['status'] ?? '';
+        final tripCategory = trip['carCategory']?.toString();
+        if (tripCategory != null && tripCategory.isNotEmpty) {
+          _selectedCategoryId = tripCategory;
+        }
 
         // HAPTIC FEEDBACK: TRIP ACCEPTED
         if (newStatus == 'accepted' && _tripStatus != 'accepted') {
@@ -686,6 +690,10 @@ class PassengerState extends ChangeNotifier {
   /// Called from the splash screen when an active trip is found.
   void restoreActiveTrip(String tripId, Map<String, dynamic> tripData) {
     final status = tripData['status']?.toString() ?? '';
+    final tripCategory = tripData['carCategory']?.toString();
+    if (tripCategory != null && tripCategory.isNotEmpty) {
+      _selectedCategoryId = tripCategory;
+    }
 
     // Parse origin coordinates and address
     final origin = tripData['origin'] as Map?;

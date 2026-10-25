@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -25,109 +27,85 @@ class RideInProgressSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final appState = Provider.of<PassengerState>(context);
+    final screenSize = MediaQuery.sizeOf(context);
+    final compactHeight = screenSize.height < 700;
     return DraggableScrollableSheet(
       minChildSize: 0.3,
-      maxChildSize: 0.7,
-      initialChildSize: 0.7,
+      maxChildSize: compactHeight ? 0.94 : 0.86,
+      initialChildSize: compactHeight ? 0.76 : 0.68,
       builder: (context, scrollController) {
         return Container(
-          padding: EdgeInsets.fromLTRB(
-            16.sp,
-            12.sp,
-            16.sp,
-            MediaQuery.of(context).padding.bottom,
-          ),
+          alignment: Alignment.topCenter,
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24.r)),
-            boxShadow: [
+            color: const Color(0xFFF7F6F2),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(30.r)),
+            boxShadow: const [
               BoxShadow(
-                color: Colors.black.withAlpha(12),
-                blurRadius: 18,
-                offset: const Offset(0, -6),
+                color: Color(0x18000000),
+                blurRadius: 28,
+                offset: Offset(0, -8),
               ),
             ],
           ),
-          child: SingleChildScrollView(
-            controller: scrollController,
-            child: Column(
-              children: [
-                _HandleBar(),
-                SizedBox(height: 14.sp),
-                _SheetHeader(isSearchingDriver: isSearchingDriver),
-                SizedBox(height: 14.sp),
-                _RouteSummaryCard(
-                  fromAddress: appState.fromAddress,
-                  toAddress: appState.toAddress,
-                  stops: appState.stops,
-                ),
-                SizedBox(height: 12.sp),
-
-                // Carro escolhido
-                (appState.tripStatus == 'accepted' ||
-                        appState.tripStatus == 'started')
-                    ? const SelectedCarCard()
-                    : const SearchingDriver(),
-
-                SizedBox(height: 12.sp),
-
-                Container(
-                  width: double.infinity,
-                  padding: EdgeInsets.all(14.sp),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.withAlpha(10),
-                    borderRadius: BorderRadius.circular(20.r),
-                    border: Border.all(
-                      color: _accentColor.withAlpha(30),
-                      width: 1,
-                    ),
-                  ),
+          child: SafeArea(
+            top: false,
+            child: SingleChildScrollView(
+              controller: scrollController,
+              padding: EdgeInsets.fromLTRB(
+                16.w,
+                10.h,
+                16.w,
+                math.max(16.h, MediaQuery.of(context).padding.bottom),
+              ),
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 620),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Text(
-                        'Cancelar viagem',
-                        style: GoogleFonts.poppins(
-                          fontSize: 14.sp,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.black87,
-                        ),
+                      const _HandleBar(),
+                      SizedBox(height: 10.h),
+                      _SheetHeader(isSearchingDriver: isSearchingDriver),
+                      SizedBox(height: 16.h),
+                      _RouteSummaryCard(
+                        fromAddress: appState.fromAddress,
+                        toAddress: appState.toAddress,
+                        stops: appState.stops,
                       ),
-                      SizedBox(height: 4.sp),
-                      Text(
-                        'Deslize para cancelar com segurança.',
-                        style: GoogleFonts.poppins(
-                          fontSize: 12.sp,
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
-                      SizedBox(height: 12.sp),
-                      CancelRideSlider(
-                        onCancel: () {
-                          appState.paymentMethod = '';
-                          appState.isPaymentSelected = false;
-                          // appState.toAddress = '';
-                          // appState.destinationLocation = null;
-                          // appState.controllerDestination.clear();
-                          // appState.showRoute = false;
-                          // showCancelTripNotification();
-
+                      SizedBox(height: 12.h),
+                      (appState.tripStatus == 'accepted' ||
+                              appState.tripStatus == 'started')
+                          ? const SelectedCarCard()
+                          : SearchingDriver(category: appState.carCategory),
+                      SizedBox(height: 8.h),
+                      _CancelTripCard(
+                        onCancel: () async {
                           final tripId = appState.currentTripId;
-                          if (tripId != null) {
-                            Provider.of<ITripRepository>(
+                          if (tripId == null) return;
+                          try {
+                            await Provider.of<ITripRepository>(
                               context,
                               listen: false,
                             ).updateTripStatus(tripId, 'cancelled');
+                            appState.paymentMethod = '';
+                            appState.isPaymentSelected = false;
                             appState.currentTripId = null;
+                          } catch (_) {
+                            if (!context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Não foi possível cancelar. Tenta novamente.',
+                                ),
+                              ),
+                            );
                           }
                         },
                       ),
                     ],
                   ),
                 ),
-
-                SizedBox(height: 12.sp),
-              ],
+              ),
             ),
           ),
         );
@@ -137,16 +115,90 @@ class RideInProgressSheet extends StatelessWidget {
 }
 
 class _HandleBar extends StatelessWidget {
+  const _HandleBar();
+
   @override
   Widget build(BuildContext context) {
     return Center(
       child: Container(
-        width: 40,
-        height: 4,
+        width: 42.w,
+        height: 4.h,
         decoration: BoxDecoration(
-          color: Colors.black.withAlpha(40),
-          borderRadius: BorderRadius.circular(10),
+          color: const Color(0xFFC7C9C0),
+          borderRadius: BorderRadius.circular(99.r),
         ),
+      ),
+    );
+  }
+}
+
+class _CancelTripCard extends StatelessWidget {
+  const _CancelTripCard({required this.onCancel});
+  final Future<void> Function() onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(14.w),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22.r),
+        border: Border.all(color: const Color(0xFFE9EAE3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.shield_outlined,
+                size: 19.sp,
+                color: RideInProgressSheet._accentColor,
+              ),
+              SizedBox(width: 8.w),
+              Expanded(
+                child: Text(
+                  'Precisa cancelar?',
+                  style: GoogleFonts.poppins(
+                    fontSize: 14.sp,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF202520),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 4.h),
+          Text(
+            'Deslize para iniciar o cancelamento. Vamos confirmar consigo antes.',
+            style: GoogleFonts.poppins(
+              fontSize: 12.sp,
+              height: 1.45,
+              color: const Color(0xFF74786E),
+            ),
+          ),
+          SizedBox(height: 12.h),
+          CancelRideSlider(onCancel: onCancel),
+          Center(
+            child: TextButton.icon(
+              onPressed: () async {
+                final confirmed = await showCancelDialog(context);
+                if (confirmed == true && context.mounted) await onCancel();
+              },
+              icon: const Icon(Icons.close_rounded, size: 18),
+              label: const Text('Cancelar sem deslizar'),
+              style: TextButton.styleFrom(
+                minimumSize: Size(48.w, 48.h),
+                foregroundColor: const Color(0xFF7E3029),
+                textStyle: GoogleFonts.poppins(
+                  fontSize: 12.sp,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -166,51 +218,89 @@ class _SheetHeader extends StatelessWidget {
     String title = 'A procurar motorista';
     String subtitle = 'Estamos a notificar motoristas próximos';
     IconData icon = Icons.radar_rounded;
+    String statusLabel = isSearchingDriver ? 'A PROCURAR' : 'PEDIDO ENVIADO';
+    Color statusColor = _accentColor;
 
     if (status == 'accepted') {
       title = 'Motorista a caminho';
       subtitle = 'O motorista aceitou o seu pedido';
       icon = Icons.directions_car_rounded;
+      statusLabel = 'CONFIRMADO';
+      statusColor = const Color(0xFF26734D);
     } else if (status == 'in_progress' || status == 'started') {
       title = 'Viagem em curso';
       subtitle = 'Acompanhe os detalhes da sua viagem';
       icon = Icons.location_on_rounded;
+      statusLabel = 'EM VIAGEM';
+      statusColor = const Color(0xFF26734D);
     }
 
     return Row(
       children: [
         Container(
-          padding: EdgeInsets.all(10.sp),
+          width: 46.w,
+          height: 46.w,
+          alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: _accentColor.withAlpha(25),
-            borderRadius: BorderRadius.circular(14.r),
+            color: const Color(0xFF202520),
+            borderRadius: BorderRadius.circular(16.r),
           ),
-          child: Icon(icon, color: _accentColor, size: 20.sp),
+          child: Icon(icon, color: const Color(0xFFF2C94C), size: 22.sp),
         ),
-        SizedBox(width: 12.sp),
+        SizedBox(width: 12.w),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Container(
+                padding: EdgeInsets.symmetric(horizontal: 8.w, vertical: 3.h),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(99.r),
+                ),
+                child: Text(
+                  statusLabel,
+                  style: GoogleFonts.poppins(
+                    fontSize: 9.sp,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.55,
+                    color: statusColor,
+                  ),
+                ),
+              ),
+              SizedBox(height: 3.h),
               Text(
                 title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: GoogleFonts.poppins(
                   fontSize: 18.sp,
                   fontWeight: FontWeight.w700,
-                  color: Colors.black,
+                  color: const Color(0xFF202520),
                 ),
               ),
-              SizedBox(height: 2.sp),
+              SizedBox(height: 1.h),
               Text(
                 subtitle,
-                style: GoogleFonts.poppins(fontSize: 12.sp, color: Colors.grey),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.poppins(
+                  fontSize: 12.sp,
+                  color: const Color(0xFF74786E),
+                ),
               ),
             ],
           ),
         ),
         if (status == 'accepted' || status == 'started')
-          GestureDetector(
-            onTap: () {
+          IconButton.filledTonal(
+            tooltip: 'Abrir conversa com o motorista',
+            constraints: BoxConstraints(minWidth: 48.w, minHeight: 48.w),
+            style: IconButton.styleFrom(
+              backgroundColor: const Color(0xFFFFF2C6),
+              foregroundColor: const Color(0xFF202520),
+            ),
+            onPressed: () {
               if (appState.currentTripId != null) {
                 Navigator.push(
                   context,
@@ -231,18 +321,7 @@ class _SheetHeader extends StatelessWidget {
                 );
               }
             },
-            child: Container(
-              padding: EdgeInsets.all(8.sp),
-              decoration: BoxDecoration(
-                color: _accentColor.withAlpha(25),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.chat_bubble_rounded,
-                color: _accentColor,
-                size: 20.sp,
-              ),
-            ),
+            icon: const Icon(Icons.chat_bubble_outline_rounded),
           ),
       ],
     );
@@ -280,36 +359,68 @@ class _RouteSummaryCard extends StatelessWidget {
     final stopsText = _stopsLabel();
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.symmetric(horizontal: 14.sp, vertical: 12.sp),
+      padding: EdgeInsets.all(15.w),
       decoration: BoxDecoration(
-        color: Colors.grey.withAlpha(12),
-        borderRadius: BorderRadius.circular(18.r),
-        border: Border.all(color: _accentColor.withAlpha(35), width: 1.2),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22.r),
+        border: Border.all(color: const Color(0xFFE9EAE3)),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Row(
+            children: [
+              Icon(Icons.route_rounded, color: _accentColor, size: 18.sp),
+              SizedBox(width: 7.w),
+              Text(
+                'PERCURSO',
+                style: GoogleFonts.poppins(
+                  fontSize: 10.sp,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.8,
+                  color: const Color(0xFF74786E),
+                ),
+              ),
+              const Spacer(),
+              if (stops.isNotEmpty)
+                Container(
+                  padding: EdgeInsets.symmetric(horizontal: 9.w, vertical: 4.h),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF5F6F1),
+                    borderRadius: BorderRadius.circular(99.r),
+                  ),
+                  child: Text(
+                    '${stops.length} ${stops.length == 1 ? 'paragem' : 'paragens'}',
+                    style: GoogleFonts.poppins(
+                      fontSize: 10.sp,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF5D6258),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          SizedBox(height: 14.h),
           _RouteRow(
             icon: Icons.my_location_rounded,
-            label: 'De',
+            label: 'EMBARQUE',
             value: fromAddress.trim().isEmpty
                 ? 'Local de recolha'
                 : fromAddress,
           ),
           SizedBox(height: 10.sp),
-          Divider(color: Colors.black.withAlpha(18), height: 1),
-          SizedBox(height: 10.sp),
+          Divider(color: const Color(0xFFE9EAE3), height: 22.h, indent: 49.w),
           _RouteRow(
             icon: Icons.flag_rounded,
-            label: 'Para',
+            label: 'DESTINO',
             value: toAddress.trim().isEmpty ? 'Destino' : toAddress,
           ),
           if (stopsText.isNotEmpty) ...[
             SizedBox(height: 10.sp),
-            Divider(color: Colors.black.withAlpha(18), height: 1),
-            SizedBox(height: 10.sp),
+            Divider(color: const Color(0xFFE9EAE3), height: 22.h, indent: 49.w),
             _RouteRow(
               icon: Icons.pin_drop_rounded,
-              label: 'Paragens',
+              label: 'PARAGENS',
               value: stopsText,
             ),
           ],
@@ -336,22 +447,15 @@ class _RouteRow extends StatelessWidget {
     return Row(
       children: [
         Container(
-          width: 38.sp,
-          height: 38.sp,
+          width: 38.w,
+          height: 38.w,
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12.r),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withAlpha(8),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
+            color: const Color(0xFFFFF8DF),
+            borderRadius: BorderRadius.circular(13.r),
           ),
           child: Icon(icon, color: _accentColor, size: 18.sp),
         ),
-        SizedBox(width: 12.sp),
+        SizedBox(width: 11.w),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -359,9 +463,10 @@ class _RouteRow extends StatelessWidget {
               Text(
                 label,
                 style: GoogleFonts.poppins(
-                  fontSize: 11.sp,
+                  fontSize: 10.sp,
                   fontWeight: FontWeight.w600,
-                  color: Colors.black54,
+                  letterSpacing: 0.45,
+                  color: const Color(0xFF74786E),
                 ),
               ),
               SizedBox(height: 2.sp),
@@ -372,7 +477,7 @@ class _RouteRow extends StatelessWidget {
                 style: GoogleFonts.poppins(
                   fontSize: 13.sp,
                   fontWeight: FontWeight.w600,
-                  color: Colors.black87,
+                  color: const Color(0xFF202520),
                 ),
               ),
             ],
