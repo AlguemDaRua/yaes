@@ -151,13 +151,11 @@ class MessagingService {
       }
     }
 
-    // Save initial token and listen for Auth changes to handle late logins
-    await _saveToken();
-    await _subscribeTopics();
+    // The initial auth event also covers a session restored on app restart.
+    // Register listeners before any network operation that could stay queued.
     FirebaseAuth.instance.authStateChanges().listen((user) {
       if (user != null) {
-        _saveToken();
-        _subscribeTopics();
+        onLogin();
       }
     });
 

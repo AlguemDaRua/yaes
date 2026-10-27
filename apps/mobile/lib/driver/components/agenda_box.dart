@@ -81,7 +81,9 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:limousineexecutive/utils/asset_paths.dart';
 
 class AgendaBox extends StatelessWidget {
-  const AgendaBox({super.key});
+  const AgendaBox({super.key, this.count = 0});
+
+  final int count;
 
   @override
   Widget build(BuildContext context) {
@@ -105,7 +107,10 @@ class AgendaBox extends StatelessWidget {
             offset: const Offset(0, 6),
           ),
         ],
-        border: Border.all(color: Colors.white.withValues(alpha: 0.6), width: 1.5),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.6),
+          width: 1.5,
+        ),
       ),
       child: Row(
         children: [
@@ -134,35 +139,41 @@ class AgendaBox extends StatelessWidget {
             ),
           ),
           SizedBox(width: 8.w),
-          Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                "Agenda",
-                style: TextStyle(
-                  fontSize: 15.sp,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white,
-                  letterSpacing: 0.5,
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "Agenda",
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 15.sp,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                    letterSpacing: 0.5,
+                  ),
                 ),
-              ),
-              Text(
-                "8",
-                style: TextStyle(
-                  fontSize: 18.sp,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.amberAccent,
-                  shadows: [
-                    Shadow(
-                      color: Colors.black.withValues(alpha: 0.5),
-                      blurRadius: 6,
-                      offset: const Offset(1, 1),
-                    ),
-                  ],
+                Text(
+                  count.toString(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 18.sp,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.amberAccent,
+                    shadows: [
+                      Shadow(
+                        color: Colors.black.withValues(alpha: 0.5),
+                        blurRadius: 6,
+                        offset: const Offset(1, 1),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ],
       ),

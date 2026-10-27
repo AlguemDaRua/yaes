@@ -5,6 +5,8 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:limousineexecutive/services/wallet_service.dart';
+import 'package:limousineexecutive/repositories/trip_repository.dart';
+import 'package:provider/provider.dart';
 
 /// Ganhos e carteira do motorista — dados reais.
 ///
@@ -52,8 +54,9 @@ class _MyGainPageState extends State<MyGainPage> {
               stream: FirebaseDatabase.instance.ref('users/$uid').onValue,
               builder: (context, snapshot) {
                 final raw = snapshot.data?.snapshot.value;
-                final profile =
-                    raw is Map ? Map<dynamic, dynamic>.from(raw) : null;
+                final profile = raw is Map
+                    ? Map<dynamic, dynamic>.from(raw)
+                    : null;
                 if (profile == null) {
                   return const Center(child: CircularProgressIndicator());
                 }
@@ -75,50 +78,161 @@ class _MyGainPageState extends State<MyGainPage> {
     final rating = (profile['rating'] as num?);
 
     List<Widget> children(DriverWallet? wallet) => [
-          _buildEarningsCard(earnings),
-          SizedBox(height: 16.sp),
-          Row(
-            children: [
-              Expanded(
-                child: _buildStatItem(
-                  'Viagens',
-                  '${trips.round()}',
-                  Icons.directions_car_filled_rounded,
-                  Colors.blue,
-                ),
-              ),
-              SizedBox(width: 16.sp),
-              Expanded(
-                child: _buildStatItem(
-                  'Avaliação',
-                  rating == null ? '—' : rating.toStringAsFixed(1),
-                  Icons.star_rounded,
-                  Colors.amber,
-                ),
-              ),
-            ],
+      _buildEarningsCard(earnings),
+      SizedBox(height: 16.sp),
+      _buildTodaySummary(uid),
+      SizedBox(height: 16.sp),
+      Row(
+        children: [
+          Expanded(
+            child: _buildStatItem(
+              'Viagens',
+              '${trips.round()}',
+              Icons.directions_car_filled_rounded,
+              Colors.blue,
+            ),
           ),
-          // Secção da carteira só quando o parceiro liquida por carteira
-          // (o nó existe); motoristas de frota normal não a veem.
-          if (wallet != null) ...[
-            SizedBox(height: 24.sp),
-            _buildWalletCard(context, wallet),
-            SizedBox(height: 16.sp),
-            _buildEntriesCard(wallet),
-          ],
-          SizedBox(height: 30.sp),
-        ];
+          SizedBox(width: 16.sp),
+          Expanded(
+            child: _buildStatItem(
+              'Avaliação',
+              rating == null ? '—' : rating.toStringAsFixed(1),
+              Icons.star_rounded,
+              Colors.amber,
+            ),
+          ),
+        ],
+      ),
+      // Secção da carteira só quando o parceiro liquida por carteira
+      // (o nó existe); motoristas de frota normal não a veem.
+      if (wallet != null) ...[
+        SizedBox(height: 24.sp),
+        _buildWalletCard(context, wallet),
+        SizedBox(height: 16.sp),
+        _buildEntriesCard(wallet),
+      ],
+      SizedBox(height: 30.sp),
+    ];
 
     ListView list(DriverWallet? wallet) => ListView(
-          padding: EdgeInsets.symmetric(horizontal: 20.sp, vertical: 10.sp),
-          children: children(wallet),
-        );
+      padding: EdgeInsets.symmetric(horizontal: 20.sp, vertical: 10.sp),
+      children: children(wallet),
+    );
 
     if (partnerId == null || partnerId.isEmpty) return list(null);
 
     return StreamBuilder<DriverWallet?>(
       stream: WalletService.watch(partnerId, uid),
       builder: (context, snapshot) => list(snapshot.data),
+    );
+  }
+
+  Widget _buildTodaySummary(String uid) {
+    final repository = Provider.of<ITripRepository>(context, listen: false);
+    final today = DateTime.now();
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: repository.readTripsByDriver(uid),
+      builder: (context, snapshot) {
+        final trips = snapshot.data ?? const <Map<String, dynamic>>[];
+        final todayTrips = trips.where((trip) {
+          final created = DateTime.tryParse(
+            trip['timestamps']?['created']?.toString() ?? '',
+          );
+          return created != null &&
+              created.year == today.year &&
+              created.month == today.month &&
+              created.day == today.day;
+        });
+        var completed = 0;
+        var cancelled = 0;
+        num earned = 0;
+        for (final trip in todayTrips) {
+          final status = trip['status']?.toString();
+          if (status == 'completed') {
+            completed++;
+            earned += (trip['estimatedPrice'] as num?) ?? 0;
+          } else if (status == 'cancelled') {
+            cancelled++;
+          }
+        }
+        return Container(
+          padding: EdgeInsets.all(18.sp),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(22.r),
+            border: Border.all(color: const Color(0xFFE9E9E5)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Resumo de hoje',
+                style: GoogleFonts.poppins(
+                  fontSize: 14.sp,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              SizedBox(height: 12.sp),
+              Row(
+                children: [
+                  Expanded(
+                    child: _todayMetric(
+                      'Ganhos',
+                      _formatMtn(earned),
+                      Icons.payments_outlined,
+                      const Color(0xFF267347),
+                    ),
+                  ),
+                  SizedBox(width: 8.sp),
+                  Expanded(
+                    child: _todayMetric(
+                      'Concluídas',
+                      '$completed',
+                      Icons.check_circle_outline_rounded,
+                      _mainColor,
+                    ),
+                  ),
+                  SizedBox(width: 8.sp),
+                  Expanded(
+                    child: _todayMetric(
+                      'Canceladas',
+                      '$cancelled',
+                      Icons.cancel_outlined,
+                      const Color(0xFFC2413A),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _todayMetric(String label, String value, IconData icon, Color color) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 18.sp, color: color),
+        SizedBox(height: 5.sp),
+        Text(
+          value,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: GoogleFonts.poppins(
+            fontSize: 12.sp,
+            fontWeight: FontWeight.w700,
+            color: const Color(0xFF24251F),
+          ),
+        ),
+        Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: GoogleFonts.poppins(fontSize: 9.sp, color: Colors.black54),
+        ),
+      ],
     );
   }
 
@@ -146,8 +260,7 @@ class _MyGainPageState extends State<MyGainPage> {
         children: [
           Text(
             'Ganhos totais',
-            style:
-                GoogleFonts.poppins(color: Colors.white70, fontSize: 13.sp),
+            style: GoogleFonts.poppins(color: Colors.white70, fontSize: 13.sp),
           ),
           SizedBox(height: 8.sp),
           Text(
@@ -193,8 +306,10 @@ class _MyGainPageState extends State<MyGainPage> {
                 ),
               ),
               Container(
-                padding:
-                    EdgeInsets.symmetric(horizontal: 10.sp, vertical: 4.sp),
+                padding: EdgeInsets.symmetric(
+                  horizontal: 10.sp,
+                  vertical: 4.sp,
+                ),
                 decoration: BoxDecoration(
                   color: wallet.isBlocked
                       ? Colors.red.withAlpha(20)
@@ -291,8 +406,7 @@ class _MyGainPageState extends State<MyGainPage> {
               ),
             )
           else
-            for (final entry in wallet.entries.take(30))
-              _buildEntryRow(entry),
+            for (final entry in wallet.entries.take(30)) _buildEntryRow(entry),
         ],
       ),
     );
@@ -302,7 +416,11 @@ class _MyGainPageState extends State<MyGainPage> {
     final (label, icon, color) = switch (entry.type) {
       'commission' => ('Comissão', Icons.percent_rounded, Colors.orange),
       'topup' => ('Recarga', Icons.add_card_rounded, Colors.green),
-      'earning' => ('Ganho (viagem digital)', Icons.payments_rounded, Colors.teal),
+      'earning' => (
+        'Ganho (viagem digital)',
+        Icons.payments_rounded,
+        Colors.teal,
+      ),
       _ => ('Ajuste', Icons.tune_rounded, Colors.blue),
     };
     final negative = entry.amountMtn < 0;
@@ -355,7 +473,11 @@ class _MyGainPageState extends State<MyGainPage> {
   }
 
   Widget _buildStatItem(
-      String label, String value, IconData icon, Color color) {
+    String label,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
     return Container(
       padding: EdgeInsets.all(16.sp),
       decoration: BoxDecoration(
@@ -418,8 +540,7 @@ class _MyGainPageState extends State<MyGainPage> {
             left: 20.sp,
             right: 20.sp,
             top: 20.sp,
-            bottom:
-                MediaQuery.of(sheetContext).viewInsets.bottom + 20.sp,
+            bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 20.sp,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -461,8 +582,9 @@ class _MyGainPageState extends State<MyGainPage> {
                 onPressed: busy
                     ? null
                     : () async {
-                        final amount =
-                            int.tryParse(amountController.text.trim());
+                        final amount = int.tryParse(
+                          amountController.text.trim(),
+                        );
                         if (amount == null || amount <= 0) return;
                         setSheetState(() => busy = true);
                         try {
@@ -484,9 +606,7 @@ class _MyGainPageState extends State<MyGainPage> {
                           setSheetState(() => busy = false);
                           if (!sheetContext.mounted) return;
                           ScaffoldMessenger.of(sheetContext).showSnackBar(
-                            SnackBar(
-                              content: Text('Erro na recarga: $e'),
-                            ),
+                            SnackBar(content: Text('Erro na recarga: $e')),
                           );
                         }
                       },

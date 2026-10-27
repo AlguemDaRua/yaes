@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_animations/flutter_map_animations.dart';
@@ -9,12 +8,11 @@ import 'package:latlong2/latlong.dart';
 import 'package:limousineexecutive/passenger/components/rate_driver.dart';
 import 'package:limousineexecutive/passenger/models/passenger_state.dart';
 import 'package:limousineexecutive/passenger/widgets/car_type_selector.dart';
-import 'package:limousineexecutive/passenger/widgets/choose_car_sheet.dart';
 import 'package:limousineexecutive/passenger/widgets/ride_in_progress_sheet.dart';
 import 'package:limousineexecutive/passenger/pages/agendas_page.dart';
 import 'package:limousineexecutive/passenger/pages/menu_page.dart';
-import 'package:limousineexecutive/services/payment_service.dart';
 import 'package:limousineexecutive/services/pricing_service.dart';
+import 'package:limousineexecutive/services/location_service.dart';
 import 'package:limousineexecutive/repositories/auth_repository.dart';
 import 'package:limousineexecutive/repositories/trip_repository.dart';
 import 'package:limousineexecutive/utils/app_config.dart';
@@ -29,11 +27,6 @@ import 'package:limousineexecutive/passenger/controllers/route_controller.dart';
 import 'package:limousineexecutive/driver/components/vehicle_marker.dart'; // Import the new widget
 import 'package:limousineexecutive/shared/widgets/map_compass_button.dart';
 import 'package:provider/provider.dart';
-
-const bool _testSkipDigitalPayment = bool.fromEnvironment(
-  'YA_TEST_SKIP_DIGITAL_PAYMENT',
-  defaultValue: kDebugMode,
-);
 
 class PassengerHomePage extends StatefulWidget {
   const PassengerHomePage({super.key});
@@ -52,6 +45,7 @@ class _PassengerHomePageState extends State<PassengerHomePage>
 
   // Route controller (route calculation + selection)
   late final RouteController _routeController;
+  late final Stream<List<Map<String, dynamic>>> _schedulesStream;
 
   // Draggable sheet controller
   late DraggableScrollableController _sheetController;
@@ -62,6 +56,7 @@ class _PassengerHomePageState extends State<PassengerHomePage>
   // Evita reabrir o diálogo de avaliação em cada rebuild depois de a viagem
   // completar (o Provider notifica em cada mudança de estado da viagem).
   String? _ratingPromptedForTripId;
+  String? _driverCancelPromptedForTripId;
 
   String token = AppConfig.mapboxToken;
 
@@ -69,6 +64,11 @@ class _PassengerHomePageState extends State<PassengerHomePage>
   void initState() {
     super.initState();
     final appState = Provider.of<PassengerState>(context, listen: false);
+    final tripRepository = Provider.of<ITripRepository>(context, listen: false);
+    final passengerUid =
+        Provider.of<IAuthRepository>(context, listen: false).currentUser?.uid ??
+        '';
+    _schedulesStream = tripRepository.readSchedules(passengerUid);
 
     // Initialise the draggable controller
     _sheetController = DraggableScrollableController();
@@ -129,6 +129,20 @@ class _PassengerHomePageState extends State<PassengerHomePage>
       _ratingPromptedForTripId = completedTripId;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _promptRating(completedTripId);
+      });
+    }
+
+    final cancelledTripId = appState.currentTripId;
+    if (appState.tripStatus == 'cancelled' &&
+        appState.tripCancelledBy == 'driver' &&
+        cancelledTripId != null &&
+        cancelledTripId != _driverCancelPromptedForTripId) {
+      _driverCancelPromptedForTripId = cancelledTripId;
+      final cancellationReason = appState.tripCancellationReason;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _promptDriverCancelledTrip(cancelledTripId, cancellationReason);
+        }
       });
     }
 
@@ -360,136 +374,117 @@ class _PassengerHomePageState extends State<PassengerHomePage>
             Positioned(
               top: MediaQuery.of(context).padding.top + 10.sp,
               left: 18.sp,
-              child: BlinkWidget(
-                active: appState.newScheduleCreated,
-                child: GestureDetector(
-                  onTap: () async {
-                    appState.newScheduleCreated =
-                        false; // disable blink after opening
-                    await Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const MyAgendas(),
-                      ),
-                    );
-
-                    _routeController.calculateRoute();
-                  },
-                  child: Stack(
-                    children: [
-                      Container(
-                        padding: EdgeInsets.all(12.sp),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(20),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.1),
-                              blurRadius: 6,
-                              offset: const Offset(0, 3),
-                            ),
-                          ],
-                        ),
-                        child: Text(
-                          'Minhas\nAgendas',
-                          style: TextStyle(
-                            fontSize: 14.sp,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black,
+              child: StreamBuilder<List<Map<String, dynamic>>>(
+                stream: _schedulesStream,
+                builder: (context, snapshot) {
+                  final schedules = snapshot.data ?? const [];
+                  if (!snapshot.hasData || schedules.isEmpty) {
+                    return const SizedBox.shrink();
+                  }
+                  return BlinkWidget(
+                    active: appState.newScheduleCreated,
+                    child: GestureDetector(
+                      onTap: () async {
+                        appState.newScheduleCreated = false;
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const MyAgendas(),
                           ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-
-                      // Schedule count indicator
-                      Positioned(
-                        top: 0,
-                        right: 2.sp,
-                        child: StreamBuilder<List<Map<String, dynamic>>>(
-                          stream:
-                              Provider.of<ITripRepository>(
-                                context,
-                                listen: false,
-                              ).readSchedules(
-                                Provider.of<IAuthRepository>(
-                                      context,
-                                      listen: false,
-                                    ).currentUser?.uid ??
-                                    '',
+                        );
+                        _routeController.calculateRoute();
+                      },
+                      child: Stack(
+                        children: [
+                          Container(
+                            padding: EdgeInsets.all(12.sp),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(20),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.1),
+                                  blurRadius: 6,
+                                  offset: const Offset(0, 3),
+                                ),
+                              ],
+                            ),
+                            child: Text(
+                              'Minhas\nAgendas',
+                              style: TextStyle(
+                                fontSize: 14.sp,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black,
                               ),
-                          builder: (context, snapshot) {
-                            final count = snapshot.data?.length ?? 0;
-                            return Container(
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                          Positioned(
+                            top: 0,
+                            right: 2.sp,
+                            child: Container(
                               padding: EdgeInsets.all(3.sp),
                               decoration: const BoxDecoration(
                                 color: Colors.black,
                                 shape: BoxShape.circle,
                               ),
                               child: Text(
-                                count.toString(),
+                                schedules.length.toString(),
                                 style: TextStyle(
                                   fontSize: 15.sp,
                                   color: Colors.white,
                                 ),
                               ),
-                            );
-                          },
-                        ),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-            /// MENU BUTTON
-            Positioned(
-              top: MediaQuery.of(context).padding.top + 10.sp,
-              right: 18.sp,
-              child: GestureDetector(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const PassengerMenuPage(),
                     ),
                   );
                 },
-                child: Container(
-                  padding: EdgeInsets.all(12.sp),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.1),
-                        blurRadius: 6,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
-                  ),
-                  child: Icon(Icons.menu, color: Colors.black, size: 18.sp),
-                ),
               ),
             ),
 
-            if (appState.showRoute)
-              Positioned(
-                top: MediaQuery.of(context).padding.top + 70.sp,
-                right: 18.sp,
-                child: const MapLegendButton(),
-              ),
-
-            /// COMPASS / NORTH BUTTON
-            AnimatedPositioned(
-              duration: const Duration(milliseconds: 250),
-              curve: Curves.easeInOut,
-              top:
-                  MediaQuery.of(context).padding.top +
-                  (appState.showRoute ? 125.sp : 70.sp),
+            /// Map controls share one column so their size and alignment stay uniform.
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 10.sp,
               right: 18.sp,
-              child: MapCompassButton(
-                animatedMapController: _animatedMapController,
+              child: Column(
+                children: [
+                  SizedBox(
+                    width: 44.sp,
+                    height: 44.sp,
+                    child: Material(
+                      color: Colors.white,
+                      shape: const CircleBorder(),
+                      elevation: 2,
+                      child: IconButton(
+                        padding: EdgeInsets.zero,
+                        tooltip: 'Menu',
+                        onPressed: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const PassengerMenuPage(),
+                          ),
+                        ),
+                        icon: Icon(
+                          Icons.menu,
+                          color: Colors.black,
+                          size: 19.sp,
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (appState.showRoute) ...[
+                    SizedBox(height: 8.sp),
+                    MapLegendButton(size: 44.sp),
+                  ],
+                  SizedBox(height: 8.sp),
+                  MapCompassButton(
+                    animatedMapController: _animatedMapController,
+                    size: 44.sp,
+                  ),
+                ],
               ),
             ),
 
@@ -527,9 +522,7 @@ class _PassengerHomePageState extends State<PassengerHomePage>
               ),
 
             // TEXTFIELDS AND CAR TYPES
-            if (
-            // !appState.showRoute &&
-            appState.selectedCarType.isEmpty && !appState.isPaymentSelected)
+            if (!appState.isPaymentSelected)
               Positioned.fill(
                 child: Align(
                   alignment: Alignment.bottomCenter,
@@ -539,6 +532,7 @@ class _PassengerHomePageState extends State<PassengerHomePage>
                     child: Padding(
                       padding: EdgeInsets.only(top: 12.sp),
                       child: CarTypeSelector(
+                        onTripRequested: _requestTrip,
                         onRouteChanged: _routeController.calculateRoute,
                         onStopRequested: () => _searchStop(context),
                         onAnimateSheet: (size) {
@@ -554,18 +548,6 @@ class _PassengerHomePageState extends State<PassengerHomePage>
                     ),
                   ),
                 ),
-              ),
-
-            // CAR SELECTION
-            if (!appState.isPaymentSelected
-                // && appState.showRoute
-                &&
-                appState.selectedCarType.isNotEmpty)
-              ChooseCarSheet(
-                sheetController: _sheetController,
-                onRouteChanged: _routeController.calculateRoute,
-                onTripRequested: _requestTrip,
-                onStopRequested: () => _searchStop(context),
               ),
 
             // RIDE IN PROGRESS
@@ -616,6 +598,35 @@ class _PassengerHomePageState extends State<PassengerHomePage>
     if (appState.currentTripId == tripId) {
       appState.currentTripId = null;
     }
+  }
+
+  Future<void> _promptDriverCancelledTrip(
+    String tripId,
+    String? cancellationReason,
+  ) async {
+    final reason = cancellationReason?.trim();
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        icon: const Icon(Icons.info_outline_rounded, color: Color(0xffe5a400)),
+        title: const Text('Viagem cancelada'),
+        content: Text(
+          reason == null || reason.isEmpty
+              ? 'O motorista cancelou esta viagem. Pode solicitar outra quando estiver pronto.'
+              : 'O motorista cancelou esta viagem. Motivo: $reason',
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Entendi'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    final appState = Provider.of<PassengerState>(context, listen: false);
+    if (appState.currentTripId == tripId) appState.currentTripId = null;
   }
 
   void _showExitAppDialog(BuildContext context) {
@@ -951,20 +962,33 @@ class _PassengerHomePageState extends State<PassengerHomePage>
 
       appState.estimatedPrice = pricing.totalAmount;
 
-      // 2. Create trip in Firebase. Digital payments are pre-paid: the trip is
-      // held in 'awaiting_payment' (drivers only see 'pending') until the PSP
-      // confirms the collection.
+      // Last-mile guard: never persist a generic "my location" label in the
+      // trip origin, even if this flow is entered without the category sheet.
+      var originAddress = appState.fromAddress;
+      if (LocationService.isGenericLocationLabel(appState.fromAddress)) {
+        final origin = appState.originLocation!;
+        final resolved = await LocationService.reverseGeocodeLabel(
+          origin,
+          mapboxToken: AppConfig.mapboxToken,
+        );
+        originAddress =
+            resolved ??
+            'Ponto de recolha (${origin.latitude.toStringAsFixed(5)}, '
+                '${origin.longitude.toStringAsFixed(5)})';
+      }
+
+      // Request the driver immediately, independently of payment confirmation.
+      // Preserve the chosen method without charging or marking the trip paid.
       final method = appState.paymentMethod ?? 'cash';
-      final usesDigitalPayment = method == 'mpesa' || method == 'emola';
-      final skipPaymentForTest = _testSkipDigitalPayment && usesDigitalPayment;
-      final requiresPayment = usesDigitalPayment && !skipPaymentForTest;
 
       final tripId = await tripRepo.createTrip(
         passengerUid: uid,
         origin: {
           'lat': appState.originLocation!.latitude,
           'lng': appState.originLocation!.longitude,
-          'name': appState.fromAddress,
+          'name': originAddress,
+          if (LocationService.isGenericLocationLabel(appState.fromAddress))
+            'source': 'current_location',
         },
         destination: {
           'lat': appState.destinationLocation!.latitude,
@@ -977,50 +1001,12 @@ class _PassengerHomePageState extends State<PassengerHomePage>
         tripType: 'regular',
         distanceKm: appState.distanceKm,
         durationMinutes: appState.durationMin.toDouble(),
-        status: requiresPayment ? 'awaiting_payment' : 'pending',
+        status: 'pending',
         carCategory: category,
       );
 
       appState.currentTripId = tripId;
       appState.listenToTrip(tripId);
-
-      // 2b. Pre-paid digital flow: charge and wait for confirmation before the
-      // trip becomes available to drivers.
-      if (requiresPayment) {
-        appState.tripStatus = 'awaiting_payment';
-        await PaymentService.initiate(tripId: tripId, method: method);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Confirma o pagamento no teu telemóvel.'),
-            ),
-          );
-        }
-        final paid = await _awaitPayment(tripRepo, tripId);
-        if (!paid) {
-          await tripRepo.updateTripStatus(tripId, 'cancelled');
-          if (mounted) {
-            appState.isSearching = false;
-            appState.tripStatus = 'cancelled';
-            appState.currentTripId = null;
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Pagamento não confirmado. Viagem cancelada.'),
-                backgroundColor: Colors.red,
-              ),
-            );
-          }
-          return;
-        }
-        // Payment confirmed → release the trip to drivers.
-        await tripRepo.updateTripStatus(tripId, 'pending');
-      } else if (skipPaymentForTest && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Teste: viagem enviada sem cobrança digital.'),
-          ),
-        );
-      }
 
       appState.tripStatus = 'pending';
     } catch (e) {
@@ -1028,7 +1014,7 @@ class _PassengerHomePageState extends State<PassengerHomePage>
         appState.isSearching = false;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Erro ao solicitar viagem. Tenta novamente.\n$e'),
+            content: Text(_tripRequestErrorMessage(e)),
             backgroundColor: Colors.red,
           ),
         );
@@ -1036,43 +1022,54 @@ class _PassengerHomePageState extends State<PassengerHomePage>
       return;
     }
 
-    // 3. Wait for acceptance (max 60s)
-    Future.delayed(const Duration(seconds: 60), () {
-      if (mounted && appState.isSearching) {
+    // Keep this timeout tied to its own request, even if another trip starts.
+    final requestedTripId = appState.currentTripId;
+    Future.delayed(const Duration(seconds: 60), () async {
+      if (!mounted ||
+          !appState.isSearching ||
+          requestedTripId == null ||
+          appState.currentTripId != requestedTripId) {
+        return;
+      }
+      try {
+        await tripRepo.updateTripStatus(
+          requestedTripId,
+          'cancelled',
+          cancelledBy: 'system',
+          cancellationReason:
+              'Nenhum motorista aceitou o pedido no tempo limite.',
+        );
+        if (!mounted || appState.currentTripId != requestedTripId) return;
         appState.isSearching = false;
         appState.tripStatus = 'cancelled';
-        final tripId = appState.currentTripId;
-        if (tripId != null) {
-          Provider.of<ITripRepository>(
-            context,
-            listen: false,
-          ).updateTripStatus(tripId, 'cancelled');
-          appState.currentTripId = null;
-        }
+        appState.currentTripId = null;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Nenhum motorista disponível. Tenta novamente.'),
           ),
         );
+      } catch (_) {
+        // A driver may have accepted while the timeout write was in flight.
+        // Keep observing the trip rather than hiding an accepted trip locally.
       }
     });
   }
 
-  /// Waits for the trip's paymentStatus to settle to 'paid' or 'failed'.
-  /// Returns true only when paid; times out (treated as not paid) after 2 min.
-  Future<bool> _awaitPayment(ITripRepository tripRepo, String tripId) async {
-    try {
-      final trip = await tripRepo
-          .watchTrip(tripId)
-          .firstWhere((t) {
-            final status = t?['paymentStatus'];
-            return status == 'paid' || status == 'failed';
-          })
-          .timeout(const Duration(seconds: 120));
-      return trip?['paymentStatus'] == 'paid';
-    } catch (_) {
-      return false;
+  String _tripRequestErrorMessage(Object error) {
+    final message = error.toString().toLowerCase();
+    if (message.contains('network') ||
+        message.contains('unavailable') ||
+        message.contains('socket')) {
+      return 'Sem ligação estável. Verifica a internet e tenta solicitar novamente.';
     }
+    if (message.contains('permission-denied') ||
+        message.contains('permission denied')) {
+      return 'A tua sessão precisa de ser atualizada. Sai e entra na conta novamente.';
+    }
+    if (message.contains('location') || message.contains('localização')) {
+      return 'Não conseguimos confirmar a tua localização. Ativa o GPS e escolhe o ponto no mapa.';
+    }
+    return 'Não foi possível enviar o pedido. Confirma os locais e tenta novamente.';
   }
 
   void _searchStop(BuildContext context) async {

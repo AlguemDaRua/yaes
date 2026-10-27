@@ -32,8 +32,7 @@ Widget locationTextField({
       fontSize: 13.5.sp,
       color: Colors.black,
     ),
-    textInputAction:
-        TextInputAction.search, // force search button on keyboard
+    textInputAction: TextInputAction.search, // force search button on keyboard
     decoration: InputDecoration(
       // labelText: label,
       hint: label == "De"
@@ -67,7 +66,8 @@ Widget locationTextField({
                     },
                   )
                 : null
-          : (appState.focusNodeDestination.hasFocus && controller.text.isNotEmpty)
+          : (appState.focusNodeDestination.hasFocus &&
+                controller.text.isNotEmpty)
           ? IconButton(
               icon: const Icon(Icons.close),
               onPressed: () {
@@ -141,8 +141,6 @@ Widget destinationTextField({
 }) {
   final appState = Provider.of<PassengerState>(context);
 
-  controller.text = appState.toAddress;
-
   return TextField(
     controller: controller,
     enabled: (appState.paymentMethod!.isNotEmpty) ? false : true,
@@ -152,8 +150,7 @@ Widget destinationTextField({
       fontSize: 13.5.sp,
       color: Colors.black,
     ),
-    textInputAction:
-        TextInputAction.search, // force search button on keyboard
+    textInputAction: TextInputAction.search, // force search button on keyboard
     decoration: InputDecoration(
       // labelText: label,
       hint: Text(
@@ -190,11 +187,6 @@ Widget destinationTextField({
     },
     onChanged: (value) {
       if (value.isNotEmpty) {
-        EasyDebounce.debounce(
-          'destino_search-debounce',
-          const Duration(milliseconds: 700),
-          () => LocationService.onSearchChanged(query: value, context: context),
-        );
         onChanged(value);
       } else {
         controller.clear();
@@ -206,8 +198,7 @@ Widget destinationTextField({
     },
     onSubmitted: (value) {
       if (value.isNotEmpty) {
-        LocationService.onSearchChanged(query: value, context: context);
-
+        // The suggestions widget observes the controller and owns the search.
         // desfoca os textfields
         FocusScope.of(context).unfocus();
       } else {
@@ -230,7 +221,6 @@ Widget originTextField({
   required BuildContext context,
 }) {
   final appState = Provider.of<PassengerState>(context);
-  controller.text = appState.fromAddress;
 
   return TextField(
     controller: controller,
@@ -241,8 +231,7 @@ Widget originTextField({
       fontSize: 13.5.sp,
       color: Colors.black,
     ),
-    textInputAction:
-        TextInputAction.search, // force search button on keyboard
+    textInputAction: TextInputAction.search, // force search button on keyboard
     decoration: InputDecoration(
       // labelText: label,
       hint: Text(
@@ -276,11 +265,6 @@ Widget originTextField({
     },
     onChanged: (value) {
       if (value.isNotEmpty) {
-        EasyDebounce.debounce(
-          'origem_search-debounce',
-          const Duration(milliseconds: 700),
-          () => LocationService.onSearchChanged(query: value, context: context),
-        );
         onChanged(value);
       } else {
         controller.clear();
@@ -293,8 +277,7 @@ Widget originTextField({
     },
     onSubmitted: (value) {
       if (value.isNotEmpty) {
-        LocationService.onSearchChanged(query: value, context: context);
-
+        // Pickup suggestions observe the controller and own the API request.
         // desfoca os textfields
         FocusScope.of(context).unfocus();
       } else {

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:flutter/foundation.dart'
     show
@@ -13,7 +15,9 @@ import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:limousineexecutive/driver/models/driver_state.dart';
+import 'package:limousineexecutive/authentication/auth_session_gate.dart';
 import 'package:limousineexecutive/driver/pages/driver_profile.dart';
+import 'package:limousineexecutive/driver/pages/driver_categories_page.dart';
 import 'package:limousineexecutive/driver/pages/initial_page_driver.dart';
 import 'package:limousineexecutive/driver/pages/menu_page.dart';
 import 'package:limousineexecutive/driver/pages/my_gain.dart';
@@ -64,6 +68,8 @@ final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 void _handleNotificationTap(NotificationPayload payload) {
   final context = navigatorKey.currentContext;
   if (context == null) {
+    // The private navigator is intentionally absent while signed out.
+    if (FirebaseAuth.instance.currentUser == null) return;
     // The terminated-app notification can be delivered before runApp builds
     // the Navigator. Retry after the first frame instead of dropping the trip.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -90,7 +96,10 @@ void _handleNotificationTap(NotificationPayload payload) {
     case 'trip_started':
     case 'trip_completed':
     case 'trip_cancelled':
-      final isDriver = Provider.of<DriverState>(context, listen: false).isOnline;
+      final isDriver = Provider.of<DriverState>(
+        context,
+        listen: false,
+      ).isOnline;
       navigatorKey.currentState?.pushNamedAndRemoveUntil(
         isDriver ? '/driver_home' : '/passenger_home',
         (r) => false,
@@ -102,9 +111,15 @@ void _handleNotificationTap(NotificationPayload payload) {
         // Alternatively, push to home and the state will handle showing the button
         // For direct navigation, we need otherUserName/PhotoUrl which are not in the basic payload yet.
         // For now, let's just go home where the user can see the chat button.
-        final userType = Provider.of<PassengerState>(context, listen: false).tripStatus.isNotEmpty ? 'passenger' : 'driver';
+        final userType =
+            Provider.of<PassengerState>(
+              context,
+              listen: false,
+            ).tripStatus.isNotEmpty
+            ? 'passenger'
+            : 'driver';
         navigatorKey.currentState?.pushNamed(
-          userType == 'passenger' ? '/passenger_home' : '/driver_home'
+          userType == 'passenger' ? '/passenger_home' : '/driver_home',
         );
       }
       break;
@@ -121,8 +136,8 @@ const bool kUseEmulators = bool.fromEnvironment('USE_EMULATORS');
 Future<void> _connectEmulators() async {
   final String host =
       (!kIsWeb && defaultTargetPlatform == TargetPlatform.android)
-          ? '10.0.2.2'
-          : 'localhost';
+      ? '10.0.2.2'
+      : 'localhost';
   FirebaseDatabase.instance.useDatabaseEmulator(host, 9000);
   await FirebaseAuth.instance.useAuthEmulator(host, 9099);
   FirebaseFunctions.instance.useFunctionsEmulator(host, 5001);
@@ -132,9 +147,7 @@ Future<void> _connectEmulators() async {
 void main() async {
   // Ensure Flutter is initialized before running async code
   final widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
-  // Mantém o splash nativo visível até o SplashScreen do Flutter desenhar o
-  // seu primeiro frame — evita os dois splashes (nativo + Flutter) a
-  // aparecerem sobrepostos por instantes durante a transição.
+  // Keep the native launch screen only until the first Flutter frame.
   FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
 
   // Lock rotation: portrait only
@@ -149,7 +162,8 @@ void main() async {
     ),
   );
 
-  final FirebaseOptions firebaseOptions = DefaultFirebaseOptions.currentPlatform;
+  final FirebaseOptions firebaseOptions =
+      DefaultFirebaseOptions.currentPlatform;
   await Firebase.initializeApp(
     // Under emulators, point at the `ya-app-z-default-rtdb` namespace — the
     // default RTDB instance where the functions' admin.database() and the DB
@@ -162,11 +176,11 @@ void main() async {
         : firebaseOptions,
   );
   if (kUseEmulators) await _connectEmulators();
+  await FirebaseAuthRepository.initializeSession();
 
   // Crash reporting: capture Flutter and platform errors in release builds.
   if (!kIsWeb && !kUseEmulators && !kDebugMode) {
-    FlutterError.onError =
-        FirebaseCrashlytics.instance.recordFlutterFatalError;
+    FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
     PlatformDispatcher.instance.onError = (error, stack) {
       FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
       return true;
@@ -204,9 +218,6 @@ void main() async {
 
     // Wire the FCM tap handler (background + cold-start) through the same router
     MessagingService.onNotificationTap = _handleNotificationTap;
-
-    // Initialize Firebase Cloud Messaging
-    await MessagingService.initialize();
   }
 
   // App Check: debug provider for local dev/emulators, real attestation in
@@ -219,8 +230,16 @@ void main() async {
       androidProvider: useDebugAppCheck
           ? AndroidProvider.debug
           : AndroidProvider.playIntegrity,
-      appleProvider:
-          useDebugAppCheck ? AppleProvider.debug : AppleProvider.deviceCheck,
+      appleProvider: useDebugAppCheck
+          ? AppleProvider.debug
+          : AppleProvider.deviceCheck,
+    );
+    // Push registration needs network access; it must not block restoring the
+    // user's local Firebase Auth session or drawing the first app frame.
+    unawaited(
+      MessagingService.initialize().catchError((Object error) {
+        debugPrint('[MESSAGING] Inicialização pendente: $error');
+      }),
     );
   }
 
@@ -237,12 +256,19 @@ void main() async {
             Provider<ITripRepository>(create: (_) => FirebaseTripRepository()),
             ChangeNotifierProvider(
               create: (context) => DriverState(
-                repository: Provider.of<ITripRepository>(context, listen: false),
+                repository: Provider.of<ITripRepository>(
+                  context,
+                  listen: false,
+                ),
+                auth: Provider.of<IAuthRepository>(context, listen: false),
               ),
             ),
             ChangeNotifierProvider(
               create: (context) => PassengerState(
-                repository: Provider.of<ITripRepository>(context, listen: false),
+                repository: Provider.of<ITripRepository>(
+                  context,
+                  listen: false,
+                ),
                 auth: Provider.of<IAuthRepository>(context, listen: false),
               ),
             ),
@@ -250,7 +276,10 @@ void main() async {
             ChangeNotifierProvider(
               lazy: false,
               create: (context) => SavedPlacesState(
-                repository: Provider.of<ITripRepository>(context, listen: false),
+                repository: Provider.of<ITripRepository>(
+                  context,
+                  listen: false,
+                ),
                 auth: Provider.of<IAuthRepository>(context, listen: false),
               ),
             ),
@@ -260,6 +289,7 @@ void main() async {
       },
     ),
   );
+  widgetsBinding.addPostFrameCallback((_) => FlutterNativeSplash.remove());
 }
 
 class MyApp extends StatelessWidget {
@@ -271,12 +301,24 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       navigatorKey: navigatorKey,
       title: 'Ya',
+      builder: (context, child) => AuthSessionGate(
+        authRepository: context.read<IAuthRepository>(),
+        signedInChild: child!,
+        signedOutChild: Navigator(
+          initialRoute: '/',
+          onGenerateRoute: (settings) => MaterialPageRoute<void>(
+            settings: settings,
+            builder: (_) => settings.name == '/otp_verification'
+                ? const OtpVerification()
+                : const PhoneNumberPage(),
+          ),
+        ),
+      ),
+      // An authenticated navigator always starts at account resolution. Login
+      // and OTP exist only in the signed-out navigator managed by the gate.
+      initialRoute: '/',
       home: const SplashScreen(),
       routes: {
-        // Autenticacao
-        '/login': (context) => const PhoneNumberPage(),
-        '/otp_verification': (context) => const OtpVerification(),
-
         // Passanger Routes
         '/passenger_home': (context) => const PassengerHomePage(),
         '/user_profile': (context) => const UserProfilePage(),
@@ -290,6 +332,7 @@ class MyApp extends StatelessWidget {
         '/driver_home': (context) => const DriverHomePage(),
         '/driver_menu': (context) => const DriverMenuPage(),
         '/driver_profile': (context) => const DriverProfile(),
+        '/driver_categories': (context) => const DriverCategoriesPage(),
         '/my_rides': (context) => const MyRidesPage(),
         '/my_gain': (context) => const MyGainPage(),
         '/ratings': (context) => const RatingsPage(),
@@ -301,7 +344,9 @@ class MyApp extends StatelessWidget {
         '/notifications': (context) => const NotificationsPage(),
         '/contact_us': (context) => const ContactUsPage(),
         '/chat': (context) {
-          final args = ModalRoute.of(context)!.settings.arguments as Map<String, dynamic>;
+          final args =
+              ModalRoute.of(context)!.settings.arguments
+                  as Map<String, dynamic>;
           return ChatPage(
             tripId: args['tripId'],
             currentUserUid: args['currentUserUid'],

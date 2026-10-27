@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:limousineexecutive/repositories/auth_repository.dart';
@@ -107,7 +108,7 @@ Future<void> showTripHistoryModal(BuildContext context) {
                     ),
                     itemCount: trips.length,
                     itemBuilder: (context, index) {
-                      return _buildTripCard(trips[index]);
+                      return _buildTripCard(context, user.uid, trips[index]);
                     },
                   );
                 },
@@ -171,7 +172,11 @@ String _translateStatus(String status) {
   }
 }
 
-Widget _buildTripCard(Map<String, dynamic> trip) {
+Widget _buildTripCard(
+  BuildContext context,
+  String passengerUid,
+  Map<String, dynamic> trip,
+) {
   final created = _parseDate(trip);
   final timeStr = _formatDateTime(created);
   final status = trip['status'] ?? 'pending';
@@ -321,7 +326,9 @@ Widget _buildTripCard(Map<String, dynamic> trip) {
         ),
         // Stops
         ...stopsList.map((stop) {
-          final stopName = stop is Map ? (stop['name'] ?? 'Paragem') : 'Paragem';
+          final stopName = stop is Map
+              ? (stop['name'] ?? 'Paragem')
+              : 'Paragem';
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -383,7 +390,171 @@ Widget _buildTripCard(Map<String, dynamic> trip) {
             ),
           ],
         ),
+        SizedBox(height: 10.sp),
+        Row(
+          children: [
+            Expanded(
+              child: _PassengerRatingStatus(
+                passengerUid: passengerUid,
+                tripId: trip['id']?.toString() ?? '',
+              ),
+            ),
+            TextButton.icon(
+              onPressed: () => _showTripReceipt(context, trip),
+              icon: Icon(Icons.receipt_long_rounded, size: 16.sp),
+              label: Text(
+                'Recibo',
+                style: GoogleFonts.poppins(
+                  fontSize: 11.sp,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFF8A6500),
+              ),
+            ),
+          ],
+        ),
       ],
     ),
   );
 }
+
+class _PassengerRatingStatus extends StatelessWidget {
+  const _PassengerRatingStatus({
+    required this.passengerUid,
+    required this.tripId,
+  });
+  final String passengerUid;
+  final String tripId;
+
+  @override
+  Widget build(BuildContext context) {
+    if (tripId.isEmpty) return const SizedBox.shrink();
+    return StreamBuilder<DatabaseEvent>(
+      stream: FirebaseDatabase.instance
+          .ref('userRatings/$passengerUid/$tripId')
+          .onValue,
+      builder: (context, snapshot) {
+        final value = snapshot.data?.snapshot.child('value').value;
+        if (value == null) return const SizedBox.shrink();
+        final rating = (value as num).toDouble();
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.star_rounded,
+              color: const Color(0xFFE5A400),
+              size: 16.sp,
+            ),
+            SizedBox(width: 4.sp),
+            Text(
+              'Avaliação dada: ${rating.toStringAsFixed(1)}',
+              style: GoogleFonts.poppins(
+                fontSize: 10.sp,
+                color: const Color(0xFF5D5B53),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+void _showTripReceipt(BuildContext context, Map<String, dynamic> trip) {
+  final amount = trip['estimatedPrice'] ?? trip['finalPrice'] ?? '—';
+  final paymentMethod = (trip['paymentMethod'] ?? 'Não registado').toString();
+  final origin = trip['origin']?['name']?.toString() ?? 'Origem';
+  final destination = trip['destination']?['name']?.toString() ?? 'Destino';
+  final date = _formatDateTime(_parseDate(trip));
+  showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: Colors.transparent,
+    builder: (sheetContext) => Container(
+      padding: EdgeInsets.fromLTRB(22.sp, 14.sp, 22.sp, 26.sp),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24.r)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 42.sp,
+              height: 4.sp,
+              decoration: BoxDecoration(
+                color: Colors.black26,
+                borderRadius: BorderRadius.circular(99),
+              ),
+            ),
+          ),
+          SizedBox(height: 18.sp),
+          Text(
+            'Recibo da viagem',
+            style: GoogleFonts.poppins(
+              fontSize: 18.sp,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          SizedBox(height: 4.sp),
+          Text(
+            date,
+            style: GoogleFonts.poppins(fontSize: 11.sp, color: Colors.black54),
+          ),
+          SizedBox(height: 16.sp),
+          _receiptLine('Partida', origin),
+          _receiptLine('Destino', destination),
+          _receiptLine('Pagamento', paymentMethod),
+          Divider(height: 24.sp),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Valor da viagem',
+                style: GoogleFonts.poppins(fontWeight: FontWeight.w700),
+              ),
+              Text(
+                '$amount MT',
+                style: GoogleFonts.poppins(
+                  fontSize: 18.sp,
+                  fontWeight: FontWeight.w800,
+                  color: const Color(0xFF8A6500),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+Widget _receiptLine(String title, String value) => Padding(
+  padding: EdgeInsets.symmetric(vertical: 5.sp),
+  child: Row(
+    children: [
+      SizedBox(
+        width: 82.sp,
+        child: Text(
+          title,
+          style: GoogleFonts.poppins(fontSize: 11.sp, color: Colors.black54),
+        ),
+      ),
+      Expanded(
+        child: Text(
+          value,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: GoogleFonts.poppins(
+            fontSize: 12.sp,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ),
+    ],
+  ),
+);

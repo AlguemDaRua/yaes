@@ -3,8 +3,6 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:pin_code_fields/pin_code_fields.dart';
 import 'package:limousineexecutive/repositories/auth_repository.dart';
 import 'package:provider/provider.dart';
-import '../services/messaging_service.dart';
-import '../utils/secure_storage.dart';
 
 class OtpVerification extends StatefulWidget {
   const OtpVerification({super.key});
@@ -16,8 +14,6 @@ class OtpVerification extends StatefulWidget {
 class _OtpVerificationState extends State<OtpVerification> {
   bool _isLoading = false;
   String? _erro;
-
-
 
   // Received via Navigator arguments
   late String _verificationId;
@@ -46,22 +42,17 @@ class _OtpVerificationState extends State<OtpVerification> {
         smsCode: codigo,
       );
 
-      if (uid == null || !mounted) return;
-
-      // Save FCM token for push notifications
-      await MessagingService.onLogin();
-
-      // Check user type
-      final userType = await authRepository.getUserType(uid);
-      await Preferences.saveType(userType);
-
       if (!mounted) return;
-
-      final rota = userType == 'driver'
-          ? '/driver_home'
-          : '/passenger_home';
-      Navigator.pushNamedAndRemoveUntil(context, rota, (route) => false);
+      if (uid == null) {
+        setState(() {
+          _isLoading = false;
+          _erro = 'Não foi possível entrar. Tenta novamente.';
+        });
+      }
+      // AuthSessionGate observes both manual and automatic SMS sign-in.
+      // Profile recovery and push registration run outside this OTP screen.
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _isLoading = false;
         _erro = e.toString().replaceAll('Exception: ', '');
@@ -92,7 +83,6 @@ class _OtpVerificationState extends State<OtpVerification> {
           _erro = erro;
         });
       },
-
     );
   }
 

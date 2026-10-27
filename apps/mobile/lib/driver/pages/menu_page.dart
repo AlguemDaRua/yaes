@@ -5,7 +5,6 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:limousineexecutive/repositories/auth_repository.dart';
 import 'package:limousineexecutive/repositories/trip_repository.dart';
-import 'package:limousineexecutive/utils/secure_storage.dart';
 import 'package:provider/provider.dart';
 
 class DriverMenuPage extends StatefulWidget {
@@ -16,8 +15,6 @@ class DriverMenuPage extends StatefulWidget {
 }
 
 class _DriverMenuPageState extends State<DriverMenuPage> {
-
-
   StreamSubscription? _profileSub;
   String name = '';
   String phone = '';
@@ -153,14 +150,7 @@ class _DriverMenuPageState extends State<DriverMenuPage> {
 
     final authRepo = Provider.of<IAuthRepository>(context, listen: false);
     await authRepo.signOut();
-    Preferences.removeNumber();
-    Preferences.removeType();
-    if (!mounted) return;
-    Navigator.pushNamedAndRemoveUntil(
-      context,
-      '/login',
-      (Route<dynamic> route) => false,
-    );
+    // AuthSessionGate disposes private routes and opens the login navigator.
   }
 
   @override
@@ -299,6 +289,14 @@ class _DriverMenuPageState extends State<DriverMenuPage> {
               ),
               child: Column(
                 children: [
+                  _buildMenuItem(
+                    icon: Icons.directions_car_filled_rounded,
+                    title: 'Categorias de transporte',
+                    color: const Color(0xffb17a00),
+                    onTap: () =>
+                        Navigator.pushNamed(context, '/driver_categories'),
+                  ),
+                  _buildDivider(),
                   _buildMenuItem(
                     icon: Icons.car_crash,
                     title: 'Minhas Corridas',

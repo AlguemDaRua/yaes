@@ -10,7 +10,7 @@ import 'package:provider/provider.dart';
 class ChooseCarSheet extends StatelessWidget {
   final DraggableScrollableController sheetController;
   final VoidCallback onRouteChanged;
-  final VoidCallback onTripRequested;
+  final Future<void> Function() onTripRequested;
   final VoidCallback onStopRequested;
 
   const ChooseCarSheet({

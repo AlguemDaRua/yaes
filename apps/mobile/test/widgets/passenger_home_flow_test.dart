@@ -74,6 +74,7 @@ void main() {
                   alignment: Alignment.bottomCenter,
                   // O seletor de tipo de carro obtém as categorias através do seu provider/serviço interno
                   child: CarTypeSelector(
+                    onTripRequested: () async {},
                     onRouteChanged: () {},
                     onStopRequested: () {},
                     onAnimateSheet: (_) {},

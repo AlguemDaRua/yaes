@@ -15,6 +15,7 @@ class MapCompassButton extends StatefulWidget {
   final VoidCallback? onReset;
   final bool autoHide;
   final Color? backgroundColor;
+  final Color? borderColor;
   final List<BoxShadow>? boxShadow;
   final EdgeInsetsGeometry? margin;
 
@@ -26,12 +27,13 @@ class MapCompassButton extends StatefulWidget {
     this.onReset,
     this.autoHide = false,
     this.backgroundColor,
+    this.borderColor,
     this.boxShadow,
     this.margin,
   }) : assert(
-          mapController != null || animatedMapController != null,
-          'Deve fornecer mapController ou animatedMapController',
-        );
+         mapController != null || animatedMapController != null,
+         'Deve fornecer mapController ou animatedMapController',
+       );
 
   @override
   State<MapCompassButton> createState() => _MapCompassButtonState();
@@ -80,8 +82,11 @@ class _MapCompassButtonState extends State<MapCompassButton> {
   @override
   void didUpdateWidget(MapCompassButton oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final oldCtrl = oldWidget.animatedMapController?.mapController ?? oldWidget.mapController;
-    final newCtrl = widget.animatedMapController?.mapController ?? widget.mapController;
+    final oldCtrl =
+        oldWidget.animatedMapController?.mapController ??
+        oldWidget.mapController;
+    final newCtrl =
+        widget.animatedMapController?.mapController ?? widget.mapController;
     if (oldCtrl != newCtrl) {
       _currentRotation = _safeRotation;
       _listenToMapEvents();
@@ -129,7 +134,11 @@ class _MapCompassButtonState extends State<MapCompassButton> {
           decoration: BoxDecoration(
             color: widget.backgroundColor ?? Colors.white,
             shape: BoxShape.circle,
-            boxShadow: widget.boxShadow ??
+            border: widget.borderColor == null
+                ? null
+                : Border.all(color: widget.borderColor!, width: 1.2),
+            boxShadow:
+                widget.boxShadow ??
                 [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.12),
@@ -145,9 +154,7 @@ class _MapCompassButtonState extends State<MapCompassButton> {
               child: SizedBox(
                 width: buttonSize * 0.65,
                 height: buttonSize * 0.65,
-                child: const CustomPaint(
-                  painter: _CompassDialPainter(),
-                ),
+                child: const CustomPaint(painter: _CompassDialPainter()),
               ),
             ),
           ),
@@ -159,10 +166,7 @@ class _MapCompassButtonState extends State<MapCompassButton> {
       return AnimatedOpacity(
         duration: const Duration(milliseconds: 200),
         opacity: hasRotation ? 1.0 : 0.0,
-        child: IgnorePointer(
-          ignoring: !hasRotation,
-          child: content,
-        ),
+        child: IgnorePointer(ignoring: !hasRotation, child: content),
       );
     }
 
@@ -196,7 +200,10 @@ class _CompassDialPainter extends CustomPainter {
     )..layout();
     textPainter.paint(
       canvas,
-      Offset(cx - textPainter.width / 2, cy - halfLen - textPainter.height + 1.5),
+      Offset(
+        cx - textPainter.width / 2,
+        cy - halfLen - textPainter.height + 1.5,
+      ),
     );
 
     final pathNorthLeft = Path()

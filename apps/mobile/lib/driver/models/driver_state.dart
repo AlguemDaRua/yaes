@@ -15,7 +15,7 @@ class DriverState extends ChangeNotifier {
   final ITripRepository _tripRepository;
   final IAuthRepository _authRepository;
 
-  DriverState({ITripRepository? repository, IAuthRepository? auth}) 
+  DriverState({ITripRepository? repository, IAuthRepository? auth})
     : _tripRepository = repository ?? FirebaseTripRepository(),
       _authRepository = auth ?? FirebaseAuthRepository();
 
@@ -28,6 +28,8 @@ class DriverState extends ChangeNotifier {
   bool _isRinging = false;
   bool _isTripStarted = false;
   bool _showRoute = false;
+  double? _routeDistanceKm;
+  double? _routeDurationMinutes;
   String? _currentTripId;
   Map<String, dynamic>? _currentTripData;
   StreamSubscription? _tripSubscription;
@@ -45,6 +47,8 @@ class DriverState extends ChangeNotifier {
   bool get isRinging => _isRinging;
   bool get isTripStarted => _isTripStarted;
   bool get showRoute => _showRoute;
+  double? get routeDistanceKm => _routeDistanceKm;
+  double? get routeDurationMinutes => _routeDurationMinutes;
   String? get currentTripId => _currentTripId;
   Map<String, dynamic>? get currentTripData => _currentTripData;
   DriverWallet? get wallet => _wallet;
@@ -99,8 +103,7 @@ class DriverState extends ChangeNotifier {
     if (uid == null || _profileSubscription != null) return;
 
     String? watchedPartnerId;
-    _profileSubscription =
-        _tripRepository.watchProfile(uid).listen((profile) {
+    _profileSubscription = _tripRepository.watchProfile(uid).listen((profile) {
       final partnerId = profile?['partnerId']?.toString();
       if (partnerId == watchedPartnerId) return;
       watchedPartnerId = partnerId;
@@ -111,8 +114,9 @@ class DriverState extends ChangeNotifier {
         notifyListeners();
         return;
       }
-      _walletSubscription =
-          WalletService.watch(partnerId, uid).listen((wallet) {
+      _walletSubscription = WalletService.watch(partnerId, uid).listen((
+        wallet,
+      ) {
         _wallet = wallet;
         // Se ficou bloqueado enquanto online, tira-o de circulação.
         if (isWalletBlocked && _isOnline && !_isOnTrip) {
@@ -141,6 +145,15 @@ class DriverState extends ChangeNotifier {
 
   void setShowRoute(bool status) {
     _showRoute = status;
+    notifyListeners();
+  }
+
+  void setRouteMetrics({
+    required double distanceKm,
+    required double durationMinutes,
+  }) {
+    _routeDistanceKm = distanceKm;
+    _routeDurationMinutes = durationMinutes;
     notifyListeners();
   }
 
@@ -213,6 +226,8 @@ class DriverState extends ChangeNotifier {
     _isRinging = false;
     _isOnTrip = false;
     _showRoute = false;
+    _routeDistanceKm = null;
+    _routeDurationMinutes = null;
     _isTripStarted = false;
     _currentTripId = null;
     _currentTripData = null;
@@ -276,7 +291,9 @@ class DriverState extends ChangeNotifier {
     // HAPTIC FEEDBACK: NEW TRIP ALERT
     try {
       HapticFeedback.lightImpact().catchError((_) {});
-      SystemChannels.platform.invokeMethod('HapticFeedback.vibrate').catchError((_) {});
+      SystemChannels.platform
+          .invokeMethod('HapticFeedback.vibrate')
+          .catchError((_) {});
     } catch (_) {}
 
     notifyListeners();

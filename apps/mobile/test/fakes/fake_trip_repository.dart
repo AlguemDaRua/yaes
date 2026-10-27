@@ -81,8 +81,17 @@ class FakeTripRepository implements ITripRepository {
   }
 
   @override
-  Future<void> updateTripStatus(String tripId, String status) async {
+  Future<void> updateTripStatus(
+    String tripId,
+    String status, {
+    String? cancelledBy,
+    String? cancellationReason,
+  }) async {
     _trips[tripId]?['status'] = status;
+    if (cancelledBy != null) _trips[tripId]?['cancelledBy'] = cancelledBy;
+    if (cancellationReason != null) {
+      _trips[tripId]?['cancellationReason'] = cancellationReason;
+    }
   }
 
   @override

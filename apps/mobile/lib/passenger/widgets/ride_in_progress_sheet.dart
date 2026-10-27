@@ -71,6 +71,8 @@ class RideInProgressSheet extends StatelessWidget {
                       SizedBox(height: 10.h),
                       _SheetHeader(isSearchingDriver: isSearchingDriver),
                       SizedBox(height: 16.h),
+                      const _NextStepCard(),
+                      SizedBox(height: 12.h),
                       _RouteSummaryCard(
                         fromAddress: appState.fromAddress,
                         toAddress: appState.toAddress,
@@ -82,27 +84,23 @@ class RideInProgressSheet extends StatelessWidget {
                           : const SearchingDriver(),
                       SizedBox(height: 8.h),
                       _CancelTripCard(
-                        onCancel: () async {
+                        onCancel: (reason) async {
                           final tripId = appState.currentTripId;
-                          if (tripId == null) return;
-                          try {
-                            await Provider.of<ITripRepository>(
-                              context,
-                              listen: false,
-                            ).updateTripStatus(tripId, 'cancelled');
-                            appState.paymentMethod = '';
-                            appState.isPaymentSelected = false;
-                            appState.currentTripId = null;
-                          } catch (_) {
-                            if (!context.mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Não foi possível cancelar. Tenta novamente.',
-                                ),
-                              ),
-                            );
+                          if (tripId == null) {
+                            throw StateError('Não existe uma viagem ativa.');
                           }
+                          await Provider.of<ITripRepository>(
+                            context,
+                            listen: false,
+                          ).updateTripStatus(
+                            tripId,
+                            'cancelled',
+                            cancelledBy: 'passenger',
+                            cancellationReason: reason,
+                          );
+                          appState.paymentMethod = '';
+                          appState.isPaymentSelected = false;
+                          appState.currentTripId = null;
                         },
                       ),
                     ],
@@ -113,6 +111,91 @@ class RideInProgressSheet extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+class _NextStepCard extends StatelessWidget {
+  const _NextStepCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final status = context.select<PassengerState, String>(
+      (state) => state.tripStatus,
+    );
+    final (step, detail, progress) = switch (status) {
+      'accepted' => (
+        'Próximo passo',
+        'O motorista está a caminho do ponto de recolha.',
+        0.5,
+      ),
+      'started' || 'in_progress' => (
+        'Viagem em curso',
+        'Acompanhe o percurso até ao destino no mapa.',
+        1.0,
+      ),
+      'awaiting_payment' => (
+        'Pagamento pendente',
+        'Confirme o pagamento para enviar o pedido aos motoristas.',
+        0.15,
+      ),
+      _ => (
+        'A procurar motorista',
+        'Assim que alguém aceitar, mostramos aqui quem vem buscá-lo.',
+        0.25,
+      ),
+    };
+
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.fromLTRB(14.w, 11.h, 14.w, 12.h),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFFBF0),
+        borderRadius: BorderRadius.circular(15.r),
+        border: Border.all(color: const Color(0xFFF2E3B7)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.route_rounded,
+                size: 17.sp,
+                color: const Color(0xFF9A7000),
+              ),
+              SizedBox(width: 7.w),
+              Text(
+                step,
+                style: GoogleFonts.poppins(
+                  fontSize: 11.sp,
+                  fontWeight: FontWeight.w700,
+                  color: RideInProgressSheet._ink,
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 3.h),
+          Text(
+            detail,
+            style: GoogleFonts.poppins(
+              fontSize: 10.5.sp,
+              height: 1.35,
+              color: RideInProgressSheet._muted,
+            ),
+          ),
+          SizedBox(height: 9.h),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(99.r),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 4.h,
+              backgroundColor: const Color(0xFFEAE6DB),
+              valueColor: const AlwaysStoppedAnimation(Color(0xFFE5A400)),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -137,7 +220,7 @@ class _HandleBar extends StatelessWidget {
 
 class _CancelTripCard extends StatelessWidget {
   const _CancelTripCard({required this.onCancel});
-  final Future<void> Function() onCancel;
+  final Future<void> Function(String reason) onCancel;
 
   @override
   Widget build(BuildContext context) {

@@ -60,6 +60,8 @@ class PassengerState extends ChangeNotifier {
   String? currentTripId; // Active trip ID in Firebase
   String _tripStatus =
       ''; // pending, accepted, in_progress, completed, cancelled
+  String? _tripCancelledBy;
+  String? _tripCancellationReason;
   bool _isSearching = false; // replaces showTemporary
   StreamSubscription<Map<String, dynamic>?>? _tripSubscription;
   double _distanceKm = 0; // distance km
@@ -176,6 +178,8 @@ class PassengerState extends ChangeNotifier {
   bool get newScheduleCreated => _newScheduleCreated;
   bool get blinkDestinationField => _blinkDestinationField;
   String get tripStatus => _tripStatus;
+  String? get tripCancelledBy => _tripCancelledBy;
+  String? get tripCancellationReason => _tripCancellationReason;
   bool get isSearching => _isSearching;
   LatLng? get driverLocation => _driverLocation;
   double get driverAngle => _driverAngle;
@@ -228,11 +232,16 @@ class PassengerState extends ChangeNotifier {
 
   set fromAddress(String address) {
     _fromAddress = address;
+    // Synchronize outside widget builds, preserving the cursor while typing.
+    if (controllerPickup.text != address) controllerPickup.text = address;
     notifyListeners();
   }
 
   set toAddress(String address) {
     _toAddress = address;
+    if (controllerDestination.text != address) {
+      controllerDestination.text = address;
+    }
     notifyListeners();
   }
 
@@ -249,8 +258,6 @@ class PassengerState extends ChangeNotifier {
   /// Selecção vinda do seletor config-driven: guarda o id de pricing
   /// directamente (não depende do label, que vem de /config e pode variar).
   void selectCategory(String id, String label, int index) {
-    // Só permite escolher transporte se origem e destino estiverem definidos
-    if (!hasTripLocations) return;
     _selectedCategoryId = id;
     _selectedCarType = label;
     _selectedCarTypeindex = index;
@@ -383,8 +390,12 @@ class PassengerState extends ChangeNotifier {
 
   void listenToTrip(String tripId) {
     _tripSubscription?.cancel();
+    _tripCancelledBy = null;
+    _tripCancellationReason = null;
     _tripSubscription = _tripRepository.watchTrip(tripId).listen((trip) {
       if (trip != null) {
+        _tripCancelledBy = trip['cancelledBy']?.toString();
+        _tripCancellationReason = trip['cancellationReason']?.toString();
         final newStatus = trip['status'] ?? '';
         final tripCategory = trip['carCategory']?.toString();
         if (tripCategory != null && tripCategory.isNotEmpty) {
@@ -557,6 +568,54 @@ class PassengerState extends ChangeNotifier {
     return counts;
   }
 
+  bool hasAvailableDriversForCategory(String category) => _onlineDrivers.any(
+    (driver) =>
+        driver['busy'] != true && _driverSupportsCategory(driver, category),
+  );
+
+  bool get hasAnyAvailableCategory => _onlineDrivers.any(
+    (driver) => driver['busy'] != true && _driverCategoryIds(driver).isNotEmpty,
+  );
+
+  /// Approximate pickup ETA from the closest online, free driver in a category.
+  /// Uses straight-line distance with a small road-distance allowance.
+  int? estimatedPickupMinutes(String category) {
+    final origin = _originLocation;
+    if (origin == null) return null;
+
+    double? nearestKm;
+    for (final driver in _onlineDrivers) {
+      if (driver['busy'] == true ||
+          !_driverSupportsCategory(driver, category)) {
+        continue;
+      }
+      final rawLocation = driver['location'];
+      if (rawLocation is! Map) continue;
+      final latValue = rawLocation['lat'];
+      final lngValue = rawLocation['lng'];
+      final latitude = latValue is num
+          ? latValue.toDouble()
+          : double.tryParse(latValue?.toString() ?? '');
+      final longitude = lngValue is num
+          ? lngValue.toDouble()
+          : double.tryParse(lngValue?.toString() ?? '');
+      if (latitude == null || longitude == null) continue;
+      if (latitude == 0 && longitude == 0) continue;
+
+      final distanceKm = const Distance().as(
+        LengthUnit.Kilometer,
+        origin,
+        LatLng(latitude, longitude),
+      );
+      if (nearestKm == null || distanceKm < nearestKm) {
+        nearestKm = distanceKm;
+      }
+    }
+
+    if (nearestKm == null) return null;
+    return max(2, (nearestKm * 1.3 / 25 * 60).ceil()).toInt();
+  }
+
   bool _driverSupportsCategory(Map driver, String category) =>
       _driverCategoryIds(driver).contains(category);
 
@@ -723,7 +782,9 @@ class PassengerState extends ChangeNotifier {
         (origin['lat'] as num).toDouble(),
         (origin['lng'] as num).toDouble(),
       );
-      _fromAddress = origin['name']?.toString() ?? 'Origem';
+      _fromAddress = origin['source']?.toString() == 'current_location'
+          ? 'Minha localização'
+          : origin['name']?.toString() ?? 'Origem';
       controllerPickup.text = _fromAddress;
     }
 

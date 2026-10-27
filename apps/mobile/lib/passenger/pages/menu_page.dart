@@ -5,7 +5,6 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:limousineexecutive/repositories/auth_repository.dart';
 import 'package:limousineexecutive/repositories/trip_repository.dart';
-import 'package:limousineexecutive/utils/secure_storage.dart';
 import 'package:provider/provider.dart';
 import 'package:limousineexecutive/passenger/models/passenger_state.dart';
 import '../components/bottomsheet/modal_trip_history.dart';
@@ -20,8 +19,6 @@ class PassengerMenuPage extends StatefulWidget {
 // Removidas antigas definições manuais de Divider e estilos textuais
 
 class _MenuState extends State<PassengerMenuPage> {
-
-
   StreamSubscription? _profileSub;
   String name = '';
   String phone = '';
@@ -48,17 +45,26 @@ class _MenuState extends State<PassengerMenuPage> {
       _profileSub = tripRepo.watchProfile(user.uid).listen((profile) {
         if (profile != null && mounted) {
           final methods = profile['paymentMethods'] as Map?;
-          final firstConfigured = methods?.entries.firstWhere(
-            (e) => (e.value?.toString() ?? '').isNotEmpty,
-            orElse: () => const MapEntry('', ''),
-          );
+          final configuredMethods = <String>[];
+          if (methods?['mpesa']?.toString().isNotEmpty == true) {
+            configuredMethods.add('M-Pesa');
+          }
+          if (methods?['emola']?.toString().isNotEmpty == true) {
+            configuredMethods.add('E-Mola');
+          }
+          final cards = methods?['cards'];
+          if (cards is Map && cards.isNotEmpty) {
+            configuredMethods.add(
+              cards.length == 1 ? 'Cartão' : 'Cartões (${cards.length})',
+            );
+          }
           setState(() {
             name = profile['name'] ?? '';
             phone = profile['phone'] ?? '';
             photoUrl = profile['photoUrl'] ?? '';
-            _paymentSubtitle = (firstConfigured?.key.isNotEmpty ?? false)
-                ? (firstConfigured!.key == 'mpesa' ? 'M-Pesa' : 'E-Mola')
-                : null;
+            _paymentSubtitle = configuredMethods.isEmpty
+                ? null
+                : configuredMethods.join(' · ');
           });
         }
       });
@@ -171,14 +177,7 @@ class _MenuState extends State<PassengerMenuPage> {
     appState.clearStops();
 
     await authRepo.signOut();
-    Preferences.removeNumber();
-    Preferences.removeType();
-    if (!mounted) return;
-    Navigator.pushNamedAndRemoveUntil(
-      context,
-      '/login',
-      (Route<dynamic> route) => false,
-    );
+    // AuthSessionGate disposes private routes and opens the login navigator.
   }
 
   @override

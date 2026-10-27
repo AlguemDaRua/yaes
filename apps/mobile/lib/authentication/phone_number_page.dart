@@ -4,7 +4,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl_phone_field/intl_phone_field.dart';
 import 'package:limousineexecutive/repositories/auth_repository.dart';
 import 'package:provider/provider.dart';
-import '../utils/secure_storage.dart';
 
 class PhoneNumberPage extends StatefulWidget {
   const PhoneNumberPage({super.key});
@@ -21,8 +20,6 @@ class _PhoneNumberPageState extends State<PhoneNumberPage> {
 
   final List<String> _validPrefixes = ['82', '83', '84', '85', '86', '87'];
   String? _errorText;
-
-
 
   @override
   void initState() {
@@ -41,10 +38,6 @@ class _PhoneNumberPageState extends State<PhoneNumberPage> {
     if (!_isPhoneValid || _isLoading) return;
 
     setState(() => _isLoading = true);
-
-    // Save number locally to show on OTP page
-    await Preferences.saveNumber(_fullPhoneNumber);
-    if (!mounted) return;
 
     final authRepository = Provider.of<IAuthRepository>(context, listen: false);
 
@@ -79,7 +72,9 @@ class _PhoneNumberPageState extends State<PhoneNumberPage> {
         height: 60,
         width: double.infinity,
         decoration: BoxDecoration(
-          color: _isLoading ? Colors.amber.withValues(alpha: 0.5) : Colors.amber,
+          color: _isLoading
+              ? Colors.amber.withValues(alpha: 0.5)
+              : Colors.amber,
           borderRadius: BorderRadius.circular(20),
         ),
         child: Center(

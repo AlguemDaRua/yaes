@@ -4,6 +4,7 @@ import 'package:limousineexecutive/passenger/components/cart_type_options_grid.d
 import 'package:limousineexecutive/passenger/models/passenger_state.dart';
 import 'package:limousineexecutive/passenger/widgets/location_inputs.dart';
 import 'package:limousineexecutive/passenger/widgets/location_search_sheet.dart';
+import 'package:limousineexecutive/passenger/widgets/car_options_list.dart';
 import 'package:limousineexecutive/utils/asset_paths.dart';
 import 'package:provider/provider.dart';
 
@@ -11,12 +12,14 @@ class CarTypeSelector extends StatelessWidget {
   final VoidCallback onRouteChanged;
   final VoidCallback onStopRequested;
   final void Function(double size) onAnimateSheet;
+  final Future<void> Function() onTripRequested;
 
   const CarTypeSelector({
     super.key,
     required this.onRouteChanged,
     required this.onStopRequested,
     required this.onAnimateSheet,
+    required this.onTripRequested,
   });
 
   @override
@@ -69,8 +72,8 @@ class CarTypeSelector extends StatelessWidget {
             ),
 
           // Car type grid
-          if (!(appState.showDestinationOptions || appState.showPickupOptions) &&
-              appState.selectedCarType.isEmpty &&
+          if (!(appState.showDestinationOptions ||
+                  appState.showPickupOptions) &&
               !appState.isPaymentSelected)
             Column(
               children: [
@@ -102,6 +105,10 @@ class CarTypeSelector extends StatelessWidget {
                   ],
                 ),
                 const CartTypeOptionsGrid(),
+                CarOptionsList(
+                  onTripRequested: onTripRequested,
+                  onAnimateSheet: onAnimateSheet,
+                ),
               ],
             ),
         ],

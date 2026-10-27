@@ -1,4 +1,5 @@
 import 'package:firebase_database/firebase_database.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:latlong2/latlong.dart';
 import 'trip_repository.dart';
 
@@ -133,7 +134,11 @@ class FirebaseTripRepository implements ITripRepository {
   }
 
   @override
-  Future<void> updateSchedule(String uid, String scheduleId, Map<String, dynamic> data) async {
+  Future<void> updateSchedule(
+    String uid,
+    String scheduleId,
+    Map<String, dynamic> data,
+  ) async {
     await _db.child("schedules/$uid/$scheduleId").update(_sanitize(data));
   }
 
@@ -173,13 +178,82 @@ class FirebaseTripRepository implements ITripRepository {
   }
 
   @override
-  Future<void> updateTripStatus(String tripId, String status) async {
+  Future<void> updateTripStatus(
+    String tripId,
+    String status, {
+    String? cancelledBy,
+    String? cancellationReason,
+  }) async {
+    final tripRef = _db.child('trips/$tripId');
     final now = DateTime.now().toIso8601String();
-    await _db.child("trips/$tripId").update({
-      "status": status,
-      "updatedAt": now,
-      "${status}At": now,
-      "timestamps/$status": now,
+    if (status == 'cancelled') {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      final reason = cancellationReason?.trim();
+      if (uid == null) {
+        throw StateError('É necessário iniciar sessão para cancelar.');
+      }
+      if (!const ['passenger', 'driver', 'system'].contains(cancelledBy) ||
+          reason == null ||
+          reason.isEmpty ||
+          reason.length > 500) {
+        throw ArgumentError(
+          'Indica quem cancela e um motivo de até 500 caracteres.',
+        );
+      }
+      if (!(await tripRef.get()).exists) {
+        throw StateError('A viagem já não existe.');
+      }
+      final result = await tripRef.runTransaction((value) {
+        // A transaction may initially receive an empty local cache. Let the
+        // server supply the current value before checking its status/owner.
+        if (value == null) return Transaction.success(value);
+        final trip = Map<String, dynamic>.from(value as Map);
+        final currentStatus = trip['status'];
+        final isOwner = cancelledBy == 'driver'
+            ? trip['driver'] == uid
+            : trip['passenger'] == uid;
+        if (!isOwner) return Transaction.abort();
+        if (currentStatus == 'cancelled') {
+          // A retry of the same cancellation must not overwrite its audit data.
+          return trip['cancelledByUid'] == uid &&
+                  trip['cancelledBy'] == cancelledBy &&
+                  trip['cancellationReason'] == reason
+              ? Transaction.success(trip)
+              : Transaction.abort();
+        }
+        if (!const [
+              'pending',
+              'accepted',
+              'started',
+              'awaiting_payment',
+            ].contains(currentStatus) ||
+            (cancelledBy == 'system' && currentStatus != 'pending')) {
+          return Transaction.abort();
+        }
+        trip.addAll({
+          'status': 'cancelled',
+          'updatedAt': now,
+          'cancelledAt': now,
+          'cancelledBy': cancelledBy,
+          'cancelledByUid': uid,
+          'cancellationReason': reason,
+          'timestamps': {
+            ...Map<String, dynamic>.from(trip['timestamps'] as Map? ?? {}),
+            'cancelled': now,
+          },
+        });
+        return Transaction.success(trip);
+      }, applyLocally: false);
+      if (!result.committed || !result.snapshot.exists) {
+        throw StateError('A viagem já não pode ser cancelada.');
+      }
+      return;
+    }
+    await tripRef.update({
+      'status': status,
+      'updatedAt': now,
+      '${status}At': now,
+      'timestamps/$status': now,
     });
 
     if (status == "completed") {
@@ -231,7 +305,12 @@ class FirebaseTripRepository implements ITripRepository {
   }
 
   @override
-  Future<void> updateLocation(String uid, double lat, double lng, double angle) async {
+  Future<void> updateLocation(
+    String uid,
+    double lat,
+    double lng,
+    double angle,
+  ) async {
     if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return;
     if (lat == 0.0 && lng == 0.0) return;
     await _db.child("drivers/$uid/location").set({
@@ -258,21 +337,28 @@ class FirebaseTripRepository implements ITripRepository {
 
   @override
   Stream<List<Map<String, dynamic>>> readTripsByPassenger(String uid) {
-    return _db.child("trips").orderByChild("passenger").equalTo(uid).onValue.map((event) {
-      final data = event.snapshot.value as Map<dynamic, dynamic>?;
-      if (data == null) return [];
-      return data.entries.map((e) {
-        if (e.value is! Map) return <String, dynamic>{};
-        final v = Map<String, dynamic>.from(e.value as Map);
-        v["id"] = e.key;
-        return v;
-      }).toList();
-    });
+    return _db
+        .child("trips")
+        .orderByChild("passenger")
+        .equalTo(uid)
+        .onValue
+        .map((event) {
+          final data = event.snapshot.value as Map<dynamic, dynamic>?;
+          if (data == null) return [];
+          return data.entries.map((e) {
+            if (e.value is! Map) return <String, dynamic>{};
+            final v = Map<String, dynamic>.from(e.value as Map);
+            v["id"] = e.key;
+            return v;
+          }).toList();
+        });
   }
 
   @override
   Stream<List<Map<String, dynamic>>> readTripsByDriver(String uid) {
-    return _db.child("trips").orderByChild("driver").equalTo(uid).onValue.map((event) {
+    return _db.child("trips").orderByChild("driver").equalTo(uid).onValue.map((
+      event,
+    ) {
       final data = event.snapshot.value as Map<dynamic, dynamic>?;
       if (data == null) return [];
       return data.entries.map((e) {
@@ -285,7 +371,12 @@ class FirebaseTripRepository implements ITripRepository {
   }
 
   @override
-  Future<void> sendMessage(String tripId, String senderId, String senderType, String text) async {
+  Future<void> sendMessage(
+    String tripId,
+    String senderId,
+    String senderType,
+    String text,
+  ) async {
     final messageRef = _db.child("chats/$tripId/messages").push();
     await messageRef.set({
       "senderId": senderId,
@@ -298,16 +389,25 @@ class FirebaseTripRepository implements ITripRepository {
 
   @override
   Stream<List<Map<String, dynamic>>> listenToMessages(String tripId) {
-    return _db.child("chats/$tripId/messages").orderByChild("timestamp").onValue.map((event) {
-      final Map<dynamic, dynamic>? values = event.snapshot.value as Map?;
-      if (values == null) return [];
-      final List<Map<String, dynamic>> messages = [];
-      values.forEach((key, value) {
-        messages.add(Map<String, dynamic>.from(value as Map)..addAll({"id": key}));
-      });
-      messages.sort((a, b) => (a['timestamp'] as String).compareTo(b['timestamp'] as String));
-      return messages;
-    });
+    return _db
+        .child("chats/$tripId/messages")
+        .orderByChild("timestamp")
+        .onValue
+        .map((event) {
+          final Map<dynamic, dynamic>? values = event.snapshot.value as Map?;
+          if (values == null) return [];
+          final List<Map<String, dynamic>> messages = [];
+          values.forEach((key, value) {
+            messages.add(
+              Map<String, dynamic>.from(value as Map)..addAll({"id": key}),
+            );
+          });
+          messages.sort(
+            (a, b) =>
+                (a['timestamp'] as String).compareTo(b['timestamp'] as String),
+          );
+          return messages;
+        });
   }
 
   @override
@@ -330,7 +430,11 @@ class FirebaseTripRepository implements ITripRepository {
 
   @override
   Future<Map<String, dynamic>?> findActiveTripForDriver(String uid) async {
-    final snapshot = await _db.child("trips").orderByChild("driver").equalTo(uid).once();
+    final snapshot = await _db
+        .child("trips")
+        .orderByChild("driver")
+        .equalTo(uid)
+        .once();
     final data = snapshot.snapshot.value as Map<dynamic, dynamic>?;
     if (data == null) return null;
     const activeStatuses = {'accepted', 'started'};
@@ -348,7 +452,11 @@ class FirebaseTripRepository implements ITripRepository {
 
   @override
   Future<Map<String, dynamic>?> findActiveTripForPassenger(String uid) async {
-    final snapshot = await _db.child("trips").orderByChild("passenger").equalTo(uid).once();
+    final snapshot = await _db
+        .child("trips")
+        .orderByChild("passenger")
+        .equalTo(uid)
+        .once();
     final data = snapshot.snapshot.value as Map<dynamic, dynamic>?;
     if (data == null) return null;
     const activeStatuses = {'pending', 'accepted', 'started'};

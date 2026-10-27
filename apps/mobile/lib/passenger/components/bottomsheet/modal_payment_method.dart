@@ -28,15 +28,18 @@ Future<String?> showPaymentMethodModal(BuildContext context) {
               required String subtitleText,
               required String image,
               Color? iconColor,
+              bool enabled = true,
             }) {
-              final bool isSelected = selectedMethod == value;
+              final bool isSelected = enabled && selectedMethod == value;
 
               return GestureDetector(
-                onTap: () {
-                  setState(() {
-                    selectedMethod = value;
-                  });
-                },
+                onTap: enabled
+                    ? () {
+                        setState(() {
+                          selectedMethod = value;
+                        });
+                      }
+                    : null,
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 250),
                   curve: Curves.easeInOut,
@@ -49,12 +52,16 @@ Future<String?> showPaymentMethodModal(BuildContext context) {
                     vertical: 14.sp,
                   ),
                   decoration: BoxDecoration(
-                    color: isSelected
+                    color: !enabled
+                        ? Colors.grey.withAlpha(8)
+                        : isSelected
                         ? const Color(0xffe5a400).withAlpha(15)
                         : Colors.grey.withAlpha(12),
                     borderRadius: BorderRadius.circular(18),
                     border: Border.all(
-                      color: isSelected
+                      color: !enabled
+                          ? Colors.transparent
+                          : isSelected
                           ? const Color(0xffe5a400)
                           : Colors.transparent,
                       width: 1.5,
@@ -95,7 +102,9 @@ Future<String?> showPaymentMethodModal(BuildContext context) {
                               style: GoogleFonts.poppins(
                                 fontWeight: FontWeight.w600,
                                 fontSize: 15.sp,
-                                color: Colors.black87,
+                                color: enabled
+                                    ? Colors.black87
+                                    : Colors.black45,
                               ),
                             ),
                             SizedBox(height: 2.sp),
@@ -103,7 +112,7 @@ Future<String?> showPaymentMethodModal(BuildContext context) {
                               subtitleText,
                               style: GoogleFonts.poppins(
                                 fontSize: 11.sp,
-                                color: Colors.grey,
+                                color: enabled ? Colors.grey : Colors.black38,
                               ),
                             ),
                           ],
@@ -220,8 +229,9 @@ Future<String?> showPaymentMethodModal(BuildContext context) {
                   buildOption(
                     value: "cartao",
                     titleText: "Cartão",
-                    subtitleText: "Pagamento com cartão bancário",
+                    subtitleText: "Pagamento com cartão ainda não disponível",
                     image: AssetPaths.creditCard,
+                    enabled: false,
                   ),
                   SizedBox(height: 20.sp),
                   // Confirm button
@@ -252,8 +262,9 @@ Future<String?> showPaymentMethodModal(BuildContext context) {
                           boxShadow: selectedMethod.isNotEmpty
                               ? [
                                   BoxShadow(
-                                    color:
-                                        const Color(0xffe5a400).withAlpha(80),
+                                    color: const Color(
+                                      0xffe5a400,
+                                    ).withAlpha(80),
                                     spreadRadius: 0,
                                     blurRadius: 16,
                                     offset: const Offset(0, 6),

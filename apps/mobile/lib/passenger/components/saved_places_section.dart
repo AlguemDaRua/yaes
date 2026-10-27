@@ -108,7 +108,7 @@ class LocationSuggestionsList extends StatelessWidget {
             isSelected: isPlaceSelected,
             onSelected: onSelectPlace,
           ),
-          const SuggestionSectionTitle('Sugestões'),
+          if (suggestions.isNotEmpty) const SuggestionSectionTitle('Sugestões'),
         ],
         for (final addr in suggestions) _buildSuggestionItem(addr),
       ],

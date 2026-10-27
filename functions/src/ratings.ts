@@ -1,16 +1,11 @@
-// Passenger→driver ratings — submitted after a completed trip.
+// Passenger↔driver ratings — submitted after a completed trip.
 //
 // Server-authoritative by design: the passenger only sends {tripId, value,
-// comment}. The trip's driverId, passengerId and status are resolved and
-// verified here — the client never asserts who it's rating, so a passenger
-// can't rate an arbitrary driver or a trip that isn't theirs.
+// comment}. The trip participants and status are resolved and verified here;
+// neither client can choose the identity of the person being rated.
 //
-// Writes /ratings/{driverId}/{tripId} (one rating per trip — the entry key
-// is the tripId itself, giving idempotency for free; nesting under driverId
-// lets the driver read their own subtree directly by rule, since RTDB rules
-// can't authorize an orderByChild query by row) and atomically folds the
-// value into the driver's running average at /users/{driverId} (rating,
-// ratingCount), which the app already displays.
+// Writes under /ratings/{ratedUserId}/{tripId} and updates that user's
+// aggregate rating. The tripId key makes each direction idempotent.
 
 import * as admin from "firebase-admin";
 import * as functions from "firebase-functions/v1";
@@ -46,10 +41,12 @@ export async function submitRatingCore(
   if (!trip) {
     throw new functions.https.HttpsError("not-found", "Trip not found.");
   }
-  if (trip.passenger !== callerUid) {
+  const raterRole = trip.passenger === callerUid ? "passenger" :
+    trip.driver === callerUid ? "driver" : null;
+  if (raterRole === null) {
     throw new functions.https.HttpsError(
       "permission-denied",
-      "Only the trip's passenger can rate this driver."
+      "Only a participant in this trip can submit a rating."
     );
   }
   if (trip.status !== "completed") {
@@ -58,31 +55,46 @@ export async function submitRatingCore(
       "The trip must be completed before it can be rated."
     );
   }
-  if (!trip.driver) {
+  const targetUid = raterRole === "passenger" ? trip.driver : trip.passenger;
+  if (!targetUid) {
     throw new functions.https.HttpsError(
       "failed-precondition",
-      "This trip has no driver to rate."
+      "The trip participant to rate is missing."
     );
   }
 
   // Idempotent: one rating per trip (entry keyed by tripId). A second
   // submission (e.g. double-tap) is a no-op, not a duplicate/second average
   // fold.
-  const ratingRef = db.ref(`ratings/${trip.driver}/${tripId}`);
+  const ratingRef = db.ref(`ratings/${targetUid}/${tripId}`);
   if ((await ratingRef.get()).exists()) {
     return {ratingId: tripId, alreadyRated: true};
   }
 
-  await ratingRef.set({
-    driverId: trip.driver,
-    passengerId: callerUid,
+  const createdAt = new Date().toISOString();
+  const ratingRecord = {
+    driverId: trip.driver ?? null,
+    passengerId: trip.passenger ?? null,
+    raterId: callerUid,
+    ratedUserId: targetUid,
+    raterRole,
     tripId,
     value,
     comment: comment && comment.length > 0 ? comment : null,
-    createdAt: new Date().toISOString(),
+    createdAt,
+  };
+  await db.ref().update({
+    [`ratings/${targetUid}/${tripId}`]: ratingRecord,
+    [`userRatings/${callerUid}/${tripId}`]: {
+      tripId,
+      ratedUserId: targetUid,
+      value,
+      comment: comment && comment.length > 0 ? comment : null,
+      createdAt,
+    },
   });
 
-  // Fold into the driver's running average. Scoped to the whole user node
+  // Fold into the rated user's running average. Scoped to the whole user node
   // (RTDB has no multi-field atomic write), preserving every other field.
   // Never abort on a falsy `current` — the Admin SDK invokes the updater
   // optimistically (it may see a stale/null snapshot before the real one),
@@ -90,8 +102,8 @@ export async function submitRatingCore(
   // first pass instead of retrying with the true value (see wallet.ts's
   // `applyWalletEntry`, which uses the same "current ?? default" shape for
   // exactly this reason).
-  const driverRef = db.ref(`users/${trip.driver}`);
-  await driverRef.transaction((current: Record<string, unknown> | null) => {
+  const ratedUserRef = db.ref(`users/${targetUid}`);
+  await ratedUserRef.transaction((current: Record<string, unknown> | null) => {
     const base = current ?? {};
     const prevCount = Number(base.ratingCount ?? 0);
     const prevAvg = Number(base.rating ?? 0);
@@ -109,7 +121,7 @@ export async function submitRatingCore(
     actorUid: callerUid,
     targetType: "rating",
     targetId: tripId,
-    meta: {driverId: trip.driver, value},
+    meta: {ratedUserId: targetUid, raterRole, value},
   });
 
   return {ratingId: tripId, alreadyRated: false};

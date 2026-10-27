@@ -39,13 +39,24 @@ abstract class ITripRepository {
   Stream<List<Map<String, dynamic>>> readSchedules(String uid);
 
   /// Update a scheduled trip
-  Future<void> updateSchedule(String uid, String scheduleId, Map<String, dynamic> data);
+  Future<void> updateSchedule(
+    String uid,
+    String scheduleId,
+    Map<String, dynamic> data,
+  );
 
   /// Driver: Accept a trip request
   Future<void> acceptTrip(String tripId, String driverUid);
 
-  /// Generic update for trip status
-  Future<void> updateTripStatus(String tripId, String status);
+  /// Generic update for trip status. Cancelling requires a reason and an actor
+  /// (`passenger`, `driver`, or `system` for the request timeout). The Firebase
+  /// implementation records the authenticated UID alongside these fields.
+  Future<void> updateTripStatus(
+    String tripId,
+    String status, {
+    String? cancelledBy,
+    String? cancellationReason,
+  });
 
   /// Driver: Update current location and orientation
   Future<void> updateLocation(String uid, double lat, double lng, double angle);
@@ -63,7 +74,12 @@ abstract class ITripRepository {
   Stream<List<Map<String, dynamic>>> readTripsByDriver(String uid);
 
   /// Chat: Send message
-  Future<void> sendMessage(String tripId, String senderId, String senderType, String text);
+  Future<void> sendMessage(
+    String tripId,
+    String senderId,
+    String senderType,
+    String text,
+  );
 
   /// Chat: Listen to messages
   Stream<List<Map<String, dynamic>>> listenToMessages(String tripId);

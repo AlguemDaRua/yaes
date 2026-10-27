@@ -1,9 +1,7 @@
-// Grid list of car type options — config-driven (/config/pricing/categories):
+// Category cards are config-driven (/config/pricing/categories):
 // o passageiro só vê as categorias que a operação activou. Categorias sem
-// oferta real (0 motoristas online livres) aparecem visualmente apagadas e
-// não são tocáveis — à semelhança do Uber/Bolt, que mostra a oferta (e o
-// preço estimado) antes de deixar escolher, em vez de um "sem veículos" só
-// depois de escolher.
+// oferta real (0 motoristas online livres) aparecem indisponíveis e não são
+// tocáveis.
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:limousineexecutive/passenger/models/cardata.dart';
@@ -22,16 +20,22 @@ class _CartTypeOptionsGridState extends State<CartTypeOptionsGrid> {
   final Future<List<CarCategory>> _categories =
       PricingService.fetchCategories();
   Future<Map<String, int>>? _availability;
-  int _lastOnlineDriversCount = -1;
+  String? _lastAvailabilitySignature;
 
   @override
   Widget build(BuildContext context) {
     final appState = Provider.of<PassengerState>(context);
-    // Recalcula sempre que o número de motoristas online muda — o primeiro
-    // build normalmente acontece antes de o stream de /drivers responder, por
-    // isso não dá para computar isto uma única vez em initState.
-    if (appState.onlineDrivers.length != _lastOnlineDriversCount) {
-      _lastOnlineDriversCount = appState.onlineDrivers.length;
+    // Actualiza também quando busy ou as categorias mudam, mesmo que o número
+    // total de motoristas online continue igual.
+    final availabilityEntries = appState.onlineDrivers.map((driver) {
+      final uid = driver['uid'];
+      final isBusy = driver['busy'];
+      final categories = driver['categories'];
+      return '$uid:$isBusy:$categories';
+    }).toList()..sort();
+    final availabilitySignature = availabilityEntries.join('|');
+    if (_lastAvailabilitySignature != availabilitySignature) {
+      _lastAvailabilitySignature = availabilitySignature;
       _availability = appState.availableVehicleCountsByCategory();
     }
     return FutureBuilder<List<CarCategory>>(
@@ -45,41 +49,51 @@ class _CartTypeOptionsGridState extends State<CartTypeOptionsGrid> {
             // evita um "sem oferta" a piscar antes da resposta chegar.
             final Map<String, int>? counts = availabilitySnapshot.data;
             return SizedBox(
-              child: GridView.count(
-                crossAxisCount: 4,
-                childAspectRatio: 0.85,
-                padding: EdgeInsets.all(12.sp),
-                crossAxisSpacing: 10.sp,
-                mainAxisSpacing: 10.sp,
-                shrinkWrap: true,
-                children: List.generate(categories.length, (index) {
-                  final category = categories[index];
-                  final bool available =
-                      counts == null || (counts[category.id] ?? 0) > 0;
-                  final bool selected =
-                      available && appState.selectedCarTypeindex == index;
-                  final double? price = (available && appState.distanceKm > 0)
-                      ? PricingService.computeLocal(
-                          tripType: TripType.regular,
-                          distanceKm: appState.distanceKm,
-                          durationMinutes: appState.durationMin.toDouble(),
-                          category: category.id,
-                        ).totalAmount
-                      : null;
-                  return _CategoryTile(
-                    category: category,
-                    selected: selected,
-                    available: available,
-                    priceMtn: price,
-                    onTap: !available
-                        ? null
-                        : () => appState.selectCategory(
-                              category.id,
-                              category.label,
-                              index,
-                            ),
-                  );
-                }),
+              height: 148.sp,
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 8.sp, vertical: 4.sp),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: List.generate(categories.length, (index) {
+                    final category = categories[index];
+                    final bool available =
+                        counts == null || (counts[category.id] ?? 0) > 0;
+                    final bool selected =
+                        available && appState.selectedCarTypeindex == index;
+                    final double? price = (available && appState.distanceKm > 0)
+                        ? PricingService.computeLocal(
+                            tripType: TripType.regular,
+                            distanceKm: appState.distanceKm,
+                            durationMinutes: appState.durationMin.toDouble(),
+                            category: category.id,
+                          ).totalAmount
+                        : null;
+                    final eta = available
+                        ? appState.estimatedPickupMinutes(category.id)
+                        : null;
+                    return Expanded(
+                      flex: selected ? 4 : 3,
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 3.sp),
+                        child: _CategoryTile(
+                          category: category,
+                          selected: selected,
+                          available: available,
+                          priceMtn: price,
+                          etaMinutes: eta,
+                          hasOrigin: appState.originLocation != null,
+                          onTap: !available
+                              ? null
+                              : () => appState.selectCategory(
+                                  category.id,
+                                  category.label,
+                                  index,
+                                ),
+                        ),
+                      ),
+                    );
+                  }),
+                ),
               ),
             );
           },
@@ -95,6 +109,8 @@ class _CategoryTile extends StatelessWidget {
     required this.selected,
     required this.available,
     required this.priceMtn,
+    required this.etaMinutes,
+    required this.hasOrigin,
     required this.onTap,
   });
 
@@ -102,138 +118,191 @@ class _CategoryTile extends StatelessWidget {
   final bool selected;
   final bool available;
   final double? priceMtn;
+  final int? etaMinutes;
+  final bool hasOrigin;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final img = CarData.categoryImages[category.id];
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedScale(
-        scale: selected ? 1.05 : 1.0,
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOut,
-        child: Opacity(
-          opacity: available ? 1 : 0.45,
+    return Semantics(
+      button: true,
+      selected: selected,
+      enabled: onTap != null,
+      label: '${category.label}${selected ? ', selecionada' : ''}',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(18.r),
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+            padding: EdgeInsets.fromLTRB(8.sp, 8.sp, 8.sp, 9.sp),
             decoration: BoxDecoration(
-              color: selected
-                  ? const Color(0xffe5a400)
-                  : const Color(0xffe5a400).withValues(alpha: 0.4),
-              borderRadius: BorderRadius.circular(16),
+              color: selected ? const Color(0xfff1e4d8) : Colors.transparent,
+              borderRadius: BorderRadius.circular(18.r),
               border: selected
-                  ? Border.all(color: Colors.black87, width: 2)
-                  : null,
-              boxShadow: available
-                  ? [
-                      BoxShadow(
-                        color: selected
-                            ? const Color(0xffe5a400).withValues(alpha: 0.5)
-                            : Colors.black.withValues(alpha: 0.08),
-                        blurRadius: selected ? 12 : 6,
-                        offset: const Offset(0, 3),
-                      ),
-                    ]
-                  : null,
+                  ? Border.all(color: const Color(0xffe5a400), width: 1.5)
+                  : Border.all(color: Colors.transparent),
             ),
-            child: Stack(
-              children: [
-                // "Popular" / "Sem oferta" — mesmo espaço, mutuamente exclusivos
-                if (category.id == 'economico' && available)
-                  Positioned(
-                    top: 3.sp,
-                    left: 0.sp,
-                    right: 0.sp,
-                    child: Center(
-                      child: Text(
-                        'Popular',
-                        style: TextStyle(
-                          color: Colors.brown,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 11.sp,
-                          fontFamily: 'Gagalin',
-                          letterSpacing: 1,
-                        ),
-                      ),
-                    ),
-                  )
-                else if (!available)
-                  Positioned(
-                    top: 3.sp,
-                    left: 4.sp,
-                    right: 4.sp,
-                    child: Center(
-                      child: Container(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 6.sp,
-                          vertical: 2.sp,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          'Sem oferta',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Colors.grey.shade800,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 8.5.sp,
-                            letterSpacing: 0.2,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-
-                Padding(
-                  padding: EdgeInsets.only(top: 16.sp, bottom: 4.sp),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      Expanded(
-                        child: Center(
-                          child: img != null
-                              ? Image.asset(img)
-                              : Icon(
-                                  CarData.categoryIcon(category.id),
-                                  size: 32.sp,
-                                  color: Colors.black87,
-                                ),
-                        ),
-                      ),
-                      Text(
-                        category.label,
-                        textAlign: TextAlign.center,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 11.sp,
-                          fontFamily: 'Gagalin',
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                      if (priceMtn != null) ...[
-                        SizedBox(height: 1.sp),
-                        Text(
-                          '~${priceMtn!.ceil()} MT',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 9.sp,
-                            color: Colors.black54,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ],
-            ),
+            child: selected ? _buildSelectedCard(img) : _buildCompactCard(img),
           ),
         ),
       ),
     );
   }
+
+  Widget _buildSelectedCard(String? img) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Center(
+            child: img != null
+                ? Image.asset(img, fit: BoxFit.contain)
+                : Icon(
+                    CarData.categoryIcon(category.id),
+                    size: 48.sp,
+                    color: Colors.black87,
+                  ),
+          ),
+        ),
+        Text(
+          _etaLabel,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: const Color(0xff5c554d),
+            fontSize: 10.sp,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        Text(
+          category.label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: Colors.black87,
+            fontSize: 13.sp,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        SizedBox(height: 2.sp),
+        Text(
+          _priceLabel,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: Colors.black,
+            fontSize: 18.sp,
+            fontWeight: FontWeight.w900,
+            height: 1,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCompactCard(String? img) {
+    final unavailable = !available;
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Expanded(
+          child: Opacity(
+            opacity: unavailable ? 0.42 : 1,
+            child: Center(
+              child: img != null
+                  ? Image.asset(img, fit: BoxFit.contain)
+                  : Icon(
+                      CarData.categoryIcon(category.id),
+                      size: 38.sp,
+                      color: const Color(0xff73776f),
+                    ),
+            ),
+          ),
+        ),
+        if (!unavailable)
+          Text(
+            _etaLabel,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: const Color(0xff68645f),
+              fontSize: 9.sp,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        Text(
+          category.label,
+          textAlign: TextAlign.center,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: unavailable
+                ? const Color(0xff92938d)
+                : const Color(0xff41473f),
+            fontSize: 10.sp,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        if (!unavailable)
+          Text(
+            _priceLabel,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: const Color(0xff34302a),
+              fontSize: 10.sp,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        if (unavailable) ...[
+          SizedBox(height: 3.sp),
+          Container(
+            padding: EdgeInsets.symmetric(horizontal: 5.sp, vertical: 3.sp),
+            decoration: BoxDecoration(
+              color: const Color(0xffeeeae4),
+              borderRadius: BorderRadius.circular(8.r),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.person_off_outlined,
+                  size: 10.sp,
+                  color: const Color(0xff76766f),
+                ),
+                SizedBox(width: 3.sp),
+                Flexible(
+                  child: Text(
+                    'Indisponível',
+                    maxLines: 1,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: const Color(0xff686a64),
+                      fontSize: 8.5.sp,
+                      height: 1.1,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  String get _etaLabel {
+    if (!available) return 'Indisponível';
+    if (!hasOrigin) return 'Defina origem';
+    final minutes = etaMinutes;
+    return minutes == null ? 'ETA —' : '$minutes min';
+  }
+
+  String get _priceLabel =>
+      priceMtn == null ? '— MT' : '${priceMtn!.ceil()} MT';
 }

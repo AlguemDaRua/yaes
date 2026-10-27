@@ -161,6 +161,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:limousineexecutive/driver/components/buttons/accept_trip_button.dart';
 import 'package:limousineexecutive/driver/components/countdown_bar.dart';
 import 'package:limousineexecutive/driver/components/countdown_text.dart';
@@ -185,8 +186,26 @@ class RingModal extends StatelessWidget {
       'moto' => 'Moto',
       _ => 'Económico',
     };
-    // TODO: Fetch calculated distance/duration if not in trip object
-    final stats = "7 km • 15 min";
+    final distance = (trip?['distanceKm'] as num?)?.toDouble();
+    final duration = (trip?['durationMinutes'] as num?)?.round();
+    final origin = trip?['origin'];
+    final originLat = (origin?['lat'] as num?)?.toDouble();
+    final originLng = (origin?['lng'] as num?)?.toDouble();
+    final pickupDistance =
+        appState.currentLocation != null &&
+            originLat != null &&
+            originLng != null
+        ? Distance().as(
+            LengthUnit.Kilometer,
+            appState.currentLocation!,
+            LatLng(originLat, originLng),
+          )
+        : null;
+    final stats = [
+      if (distance != null && distance > 0)
+        '${distance.toStringAsFixed(1).replaceAll('.', ',')} km',
+      if (duration != null && duration > 0) '$duration min',
+    ].join(' • ');
 
     return Container(
       margin: const EdgeInsets.only(left: 10, right: 10, bottom: 10),
@@ -241,6 +260,27 @@ class RingModal extends StatelessWidget {
                 fontWeight: FontWeight.w600,
               ),
             ),
+            if (pickupDistance != null) ...[
+              SizedBox(height: 6.sp),
+              Container(
+                padding: EdgeInsets.symmetric(
+                  horizontal: 10.sp,
+                  vertical: 5.sp,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withValues(alpha: 0.16),
+                  borderRadius: BorderRadius.circular(99),
+                ),
+                child: Text(
+                  '${pickupDistance.toStringAsFixed(1).replaceAll('.', ',')} km até ao passageiro',
+                  style: TextStyle(
+                    color: Colors.amber.shade100,
+                    fontSize: 11.sp,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
 
             SizedBox(height: 20.sp),
 
@@ -308,7 +348,9 @@ class RingModal extends StatelessWidget {
                   children: [
                     Icon(Icons.star, color: Colors.amber, size: 22.sp),
                     Text(
-                      "5.0 (325)",
+                      trip?['passengerRating'] == null
+                          ? "Novo passageiro"
+                          : "${(trip!['passengerRating'] as num).toStringAsFixed(1)} avaliação",
                       style: TextStyle(color: Colors.white, fontSize: 12.sp),
                     ),
                   ],
@@ -317,7 +359,7 @@ class RingModal extends StatelessWidget {
                   children: [
                     Icon(Icons.route, color: Colors.blueAccent, size: 22.sp),
                     Text(
-                      stats,
+                      stats.isEmpty ? 'Percurso' : stats,
                       style: TextStyle(color: Colors.white, fontSize: 12.sp),
                     ),
                   ],

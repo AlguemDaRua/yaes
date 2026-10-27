@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:limousineexecutive/driver/components/dialogs/call_passenger_dialog.dart';
 import 'package:limousineexecutive/driver/components/dialogs/cancel_trip_dialog.dart';
-import 'package:limousineexecutive/driver/components/dialogs/unaccepted_trip_dialog.dart';
 import 'package:limousineexecutive/driver/components/dialogs/interrupt_trip_dialog.dart';
+import 'package:limousineexecutive/driver/components/dialog_end_trip.dart';
 import 'package:limousineexecutive/driver/models/driver_state.dart';
 import 'package:limousineexecutive/repositories/trip_repository.dart';
 import 'package:limousineexecutive/utils/functions/make_phone_call.dart';
@@ -21,11 +21,34 @@ class GoingToPassenger extends StatefulWidget {
 }
 
 class _GoingToPassengerState extends State<GoingToPassenger> {
+  String? _passengerUid;
+  Stream<Map<String, dynamic>?>? _passengerProfileStream;
+
+  Stream<Map<String, dynamic>?> _profileStreamFor(
+    ITripRepository repository,
+    String? passengerUid,
+  ) {
+    if (passengerUid != _passengerUid || _passengerProfileStream == null) {
+      _passengerUid = passengerUid;
+      _passengerProfileStream = passengerUid == null
+          ? Stream.value(null)
+          : repository.watchProfile(passengerUid);
+    }
+    return _passengerProfileStream!;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final appState = Provider.of<DriverState>(context);
+    final (isTripStarted, _, _) = context
+        .select<DriverState, (bool, double?, double?)>(
+          (state) => (
+            state.isTripStarted,
+            state.routeDurationMinutes,
+            state.routeDistanceKm,
+          ),
+        );
 
-    if (!appState.isTripStarted) {
+    if (!isTripStarted) {
       return _goingToPassanger();
     } else {
       return _goingToDestiny();
@@ -33,18 +56,18 @@ class _GoingToPassengerState extends State<GoingToPassenger> {
   }
 
   Widget _goingToPassanger() {
-    final appState = Provider.of<DriverState>(context);
+    final appState = Provider.of<DriverState>(context, listen: false);
     final tripData = appState.currentTripData;
     final passengerUid = tripData?['passenger'] as String?;
     final tripRepo = Provider.of<ITripRepository>(context, listen: false);
+    final profileStream = _profileStreamFor(tripRepo, passengerUid);
 
     return StreamBuilder<Map<String, dynamic>?>(
-      stream: passengerUid != null
-          ? tripRepo.watchProfile(passengerUid)
-          : Stream.value(null),
+      stream: profileStream,
       builder: (context, snapshot) {
         final passengerData = snapshot.data ?? {};
-        final passengerName = (passengerData['name']?.toString().isNotEmpty == true)
+        final passengerName =
+            (passengerData['name']?.toString().isNotEmpty == true)
             ? passengerData['name'].toString()
             : 'Passageiro';
         final passengerPhone = passengerData['phone']?.toString() ?? '';
@@ -76,7 +99,11 @@ class _GoingToPassengerState extends State<GoingToPassenger> {
               // Header
               Row(
                 children: [
-                  Icon(Icons.directions_car, color: Colors.blueAccent, size: 22.sp),
+                  Icon(
+                    Icons.directions_car,
+                    color: Colors.blueAccent,
+                    size: 22.sp,
+                  ),
                   SizedBox(width: 8.sp),
                   Text(
                     'Indo até o Passageiro',
@@ -88,7 +115,7 @@ class _GoingToPassengerState extends State<GoingToPassenger> {
                   ),
                   const Spacer(),
                   Text(
-                    '30s • 0.2 km',
+                    _routeSummary(appState),
                     style: TextStyle(
                       fontSize: 14.sp,
                       fontWeight: FontWeight.w600,
@@ -119,7 +146,10 @@ class _GoingToPassengerState extends State<GoingToPassenger> {
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(20),
                         color: Colors.white.withValues(alpha: 0.1),
-                        border: Border.all(color: appState.mainColor, width: 1.sp),
+                        border: Border.all(
+                          color: appState.mainColor,
+                          width: 1.sp,
+                        ),
                         image: (photoUrl != null && photoUrl.isNotEmpty)
                             ? DecorationImage(
                                 image: NetworkImage(photoUrl),
@@ -128,7 +158,11 @@ class _GoingToPassengerState extends State<GoingToPassenger> {
                             : null,
                       ),
                       child: (photoUrl == null || photoUrl.isEmpty)
-                          ? Icon(Icons.person, size: 36.sp, color: Colors.white70)
+                          ? Icon(
+                              Icons.person,
+                              size: 36.sp,
+                              color: Colors.white70,
+                            )
                           : null,
                     ),
                     SizedBox(width: 16.sp),
@@ -161,7 +195,9 @@ class _GoingToPassengerState extends State<GoingToPassenger> {
                               Container(
                                 padding: EdgeInsets.all(5.sp),
                                 decoration: BoxDecoration(
-                                  color: Colors.blueAccent.withValues(alpha: 0.2),
+                                  color: Colors.blueAccent.withValues(
+                                    alpha: 0.2,
+                                  ),
                                   shape: BoxShape.circle,
                                 ),
                                 child: Icon(
@@ -172,7 +208,9 @@ class _GoingToPassengerState extends State<GoingToPassenger> {
                               ),
                               SizedBox(width: 6.sp),
                               Text(
-                                passengerPhone.isNotEmpty ? passengerPhone : 'Sem número',
+                                passengerPhone.isNotEmpty
+                                    ? passengerPhone
+                                    : 'Sem número',
                                 style: TextStyle(
                                   fontSize: 14.sp,
                                   color: Colors.white70,
@@ -188,7 +226,8 @@ class _GoingToPassengerState extends State<GoingToPassenger> {
                     // Chat button
                     GestureDetector(
                       onTap: () {
-                        final uid = appState.currentTripData?['driver'] as String?;
+                        final uid =
+                            appState.currentTripData?['driver'] as String?;
                         if (uid != null && appState.currentTripId != null) {
                           Navigator.push(
                             context,
@@ -211,7 +250,10 @@ class _GoingToPassengerState extends State<GoingToPassenger> {
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           color: Colors.white.withValues(alpha: 0.1),
-                          border: Border.all(color: appState.mainColor, width: 1.sp),
+                          border: Border.all(
+                            color: appState.mainColor,
+                            width: 1.sp,
+                          ),
                         ),
                         child: Icon(
                           Icons.chat,
@@ -233,16 +275,17 @@ class _GoingToPassengerState extends State<GoingToPassenger> {
                     Material(
                       color: Colors.transparent,
                       child: InkWell(
-                        onTap: () {
-                          showCancelTripDialog(context, () {
-                            if (appState.currentTripId != null) {
-                              Provider.of<ITripRepository>(context, listen: false).updateTripStatus(
-                                appState.currentTripId!,
-                                'cancelled',
-                              );
-                            }
-                            appState.endTrip();
-                            showUnacceptedDialog(context);
+                        onTap: () async {
+                          final tripId = appState.currentTripId;
+                          if (tripId == null) return;
+                          final repository = context.read<ITripRepository>();
+                          await showCancelTripDialog(context, (reason) async {
+                            await repository.updateTripStatus(
+                              tripId,
+                              'cancelled',
+                              cancelledBy: 'driver',
+                              cancellationReason: reason,
+                            );
                           });
                         },
                         borderRadius: BorderRadius.circular(30),
@@ -275,7 +318,10 @@ class _GoingToPassengerState extends State<GoingToPassenger> {
                     GestureDetector(
                       onTap: () async {
                         if (appState.currentTripId != null) {
-                          await Provider.of<ITripRepository>(context, listen: false).updateTripStatus(
+                          await Provider.of<ITripRepository>(
+                            context,
+                            listen: false,
+                          ).updateTripStatus(
                             appState.currentTripId!,
                             'started',
                           );
@@ -329,8 +375,21 @@ class _GoingToPassengerState extends State<GoingToPassenger> {
     );
   }
 
+  String _routeSummary(DriverState appState) {
+    final minutes = appState.routeDurationMinutes;
+    final distanceKm = appState.routeDistanceKm;
+    if (minutes == null ||
+        distanceKm == null ||
+        minutes <= 0 ||
+        distanceKm <= 0) {
+      return 'A calcular rota';
+    }
+    final km = distanceKm.toStringAsFixed(1).replaceAll('.', ',');
+    return '${minutes.ceil()} min • $km km';
+  }
+
   Widget _goingToDestiny() {
-    final appState = Provider.of<DriverState>(context);
+    final appState = Provider.of<DriverState>(context, listen: false);
     final tripData = appState.currentTripData;
     final destinationName =
         tripData?['destination']?['name']?.toString() ?? 'Destino indisponível';
@@ -396,7 +455,7 @@ class _GoingToPassengerState extends State<GoingToPassenger> {
                 ),
                 SizedBox(height: 8.sp),
                 Text(
-                  '10 min • 3 km',
+                  _routeSummary(appState),
                   style: TextStyle(
                     fontSize: 14.sp,
                     fontWeight: FontWeight.bold,
@@ -415,20 +474,17 @@ class _GoingToPassengerState extends State<GoingToPassenger> {
             children: [
               // Interromper
               GestureDetector(
-                onTap: () {
-                  showInterruptTripDialog(context, (reason) {
-                    if (appState.currentTripId != null) {
-                      Provider.of<ITripRepository>(
-                        context,
-                        listen: false,
-                      ).updateTripStatus(
-                        appState.currentTripId!,
-                        'cancelled', // Or a more specific status like 'interrupted' if the DB supports it
-                      );
-                      // Optionally save the reason to the database here if needed
-                    }
-                    appState.endTrip();
-                    showUnacceptedDialog(context);
+                onTap: () async {
+                  final tripId = appState.currentTripId;
+                  if (tripId == null) return;
+                  final repository = context.read<ITripRepository>();
+                  await showInterruptTripDialog(context, (reason) async {
+                    await repository.updateTripStatus(
+                      tripId,
+                      'cancelled',
+                      cancelledBy: 'driver',
+                      cancellationReason: reason,
+                    );
                   });
                 },
                 child: Container(
@@ -467,11 +523,18 @@ class _GoingToPassengerState extends State<GoingToPassenger> {
               // Concluir
               GestureDetector(
                 onTap: () async {
-                  if (appState.currentTripId != null) {
+                  final tripId = appState.currentTripId;
+                  final navigator = Navigator.of(context);
+                  if (tripId != null) {
                     await Provider.of<ITripRepository>(
                       context,
                       listen: false,
-                    ).updateTripStatus(appState.currentTripId!, 'completed');
+                    ).updateTripStatus(tripId, 'completed');
+                    if (!navigator.mounted) return;
+                    await showRatePassengerDialog(
+                      navigator.context,
+                      tripId: tripId,
+                    );
                   }
                   appState.endTrip();
                 },

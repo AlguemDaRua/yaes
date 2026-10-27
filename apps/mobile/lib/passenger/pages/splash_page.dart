@@ -1,22 +1,19 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:limousineexecutive/authentication/phone_number_page.dart';
 import 'package:limousineexecutive/driver/models/driver_state.dart';
 import 'package:limousineexecutive/driver/pages/initial_page_driver.dart';
 import 'package:limousineexecutive/passenger/models/passenger_state.dart';
 import 'package:limousineexecutive/passenger/pages/passenger_home_page.dart';
 import 'package:limousineexecutive/repositories/auth_repository.dart';
 import 'package:limousineexecutive/repositories/trip_repository.dart';
-import 'package:limousineexecutive/utils/secure_storage.dart';
+import 'package:limousineexecutive/services/session_role_service.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
-import '../../utils/asset_paths.dart';
 
 // ═══════════════════════════════════════════
 // TRIP RECOVERY DIALOGS
@@ -33,9 +30,7 @@ Future<void> _showPassengerRecoveryDialog(BuildContext context, String status) {
     barrierDismissible: false,
     builder: (ctx) => Dialog(
       backgroundColor: Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(24.r),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24.r)),
       child: Padding(
         padding: EdgeInsets.all(24.sp),
         child: Column(
@@ -115,7 +110,10 @@ Future<void> _showDriverRecoveryDialog(BuildContext context, String status) {
       backgroundColor: Colors.black.withValues(alpha: 0.85),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.white.withValues(alpha: 0.6), width: 1.5),
+        side: BorderSide(
+          color: Colors.white.withValues(alpha: 0.6),
+          width: 1.5,
+        ),
       ),
       icon: Icon(
         Icons.local_taxi_rounded,
@@ -176,10 +174,10 @@ Future<void> _getCurrentLocation(BuildContext context) async {
 
   try {
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) return;
+    if (!serviceEnabled || !context.mounted) return;
 
     var status = await Permission.location.request();
-    if (status.isDenied || status.isPermanentlyDenied) {
+    if (!context.mounted || status.isDenied || status.isPermanentlyDenied) {
       return;
     }
 
@@ -187,9 +185,10 @@ Future<void> _getCurrentLocation(BuildContext context) async {
     // posição fresca (com timeout curto) se não houver cache.
     var position = await Geolocator.getLastKnownPosition();
     position ??= await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.low),
-      ).timeout(const Duration(seconds: 3));
+      locationSettings: const LocationSettings(accuracy: LocationAccuracy.low),
+    ).timeout(const Duration(seconds: 3));
 
+    if (!context.mounted) return;
     passageiroState.currentLocation = LatLng(
       position.latitude,
       position.longitude,
@@ -205,9 +204,8 @@ Future<void> _getCurrentLocation(BuildContext context) async {
   }
 }
 
-/// Splash único: mostra a marca, resolve sessão+tipo+viagem activa em
-/// paralelo com a localização (que nunca bloqueia), e navega assim que a
-/// resolução terminar — sujeito a um tempo mínimo de marca (evita "flash").
+/// Resolves the authenticated account and recovers an active trip. This is
+/// a bootstrap step, with no second branded splash after OTP sign-in.
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
@@ -215,30 +213,12 @@ class SplashScreen extends StatefulWidget {
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen>
-    with SingleTickerProviderStateMixin {
-  static const _minVisible = Duration(milliseconds: 500);
-  static const _transitionDuration = Duration(milliseconds: 350);
-
-  late final AnimationController _controller;
-  late final Animation<double> _fadeIn;
+class _SplashScreenState extends State<SplashScreen> {
+  String? _startupError;
 
   @override
   void initState() {
     super.initState();
-
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 400),
-      vsync: this,
-    );
-    _fadeIn = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
-    _controller.forward();
-
-    // Só remove o splash nativo depois deste frame estar desenhado — evita
-    // o "salto" de ver os dois splashes (nativo + Flutter) sobrepostos.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      FlutterNativeSplash.remove();
-    });
 
     // Localização em paralelo — nunca atrasa a navegação.
     unawaited(_getCurrentLocation(context));
@@ -247,23 +227,31 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Future<void> _resolveAndNavigate() async {
-    final started = DateTime.now();
+    setState(() => _startupError = null);
 
     final authRepo = Provider.of<IAuthRepository>(context, listen: false);
     final tripRepo = Provider.of<ITripRepository>(context, listen: false);
+    // AuthSessionGate owns authentication. Profile/cache failures keep the
+    // authenticated session here with a retry action instead of opening login.
     final currentUser = authRepo.currentUser;
+    if (currentUser == null) return;
 
     Widget destino;
-    if (currentUser == null) {
-      destino = const PhoneNumberPage();
-    } else {
-      final userType = await authRepo.getUserType(currentUser.uid);
-      await Preferences.saveType(userType);
+    try {
+      final userType = await SessionRoleService(
+        auth: authRepo,
+      ).resolveType(currentUser);
       if (!mounted) return;
 
       if (userType == 'driver') {
-        final activeTrip =
-            await tripRepo.findActiveTripForDriver(currentUser.uid);
+        Map<String, dynamic>? activeTrip;
+        try {
+          activeTrip = await tripRepo
+              .findActiveTripForDriver(currentUser.uid)
+              .timeout(const Duration(seconds: 6));
+        } catch (error) {
+          debugPrint('Falha ao recuperar viagem do motorista: $error');
+        }
         if (activeTrip != null && mounted) {
           final tripStatus = activeTrip['status']?.toString() ?? '';
           await _showDriverRecoveryDialog(context, tripStatus);
@@ -273,99 +261,84 @@ class _SplashScreenState extends State<SplashScreen>
         }
         destino = const DriverHomePage();
       } else {
-        final activeTrip =
-            await tripRepo.findActiveTripForPassenger(currentUser.uid);
+        Map<String, dynamic>? activeTrip;
+        try {
+          activeTrip = await tripRepo
+              .findActiveTripForPassenger(currentUser.uid)
+              .timeout(const Duration(seconds: 6));
+        } catch (error) {
+          debugPrint('Falha ao recuperar viagem do passageiro: $error');
+        }
         if (activeTrip != null && mounted) {
           final tripStatus = activeTrip['status']?.toString() ?? '';
           await _showPassengerRecoveryDialog(context, tripStatus);
           if (!mounted) return;
-          final passengerState =
-              Provider.of<PassengerState>(context, listen: false);
+          final passengerState = Provider.of<PassengerState>(
+            context,
+            listen: false,
+          );
           passengerState.restoreActiveTrip(activeTrip['id'], activeTrip);
         }
         destino = const PassengerHomePage();
       }
-    }
-
-    // Tempo mínimo de marca (para não "piscar" em ligações rápidas), nunca
-    // mais do que o necessário.
-    final elapsed = DateTime.now().difference(started);
-    if (elapsed < _minVisible) {
-      await Future.delayed(_minVisible - elapsed);
+    } catch (error) {
+      debugPrint('[SESSION] Não foi possível recuperar a conta: $error');
+      if (!mounted) return;
+      setState(
+        () => _startupError =
+            'Não foi possível recuperar a tua conta. Verifica a ligação e tenta novamente.',
+      );
+      return;
     }
 
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       PageRouteBuilder(
-        transitionDuration: _transitionDuration,
+        transitionDuration: Duration.zero,
+        reverseTransitionDuration: Duration.zero,
         pageBuilder: (_, __, ___) => destino,
-        transitionsBuilder: (_, animation, __, child) {
-          return FadeTransition(opacity: animation, child: child);
-        },
       ),
       (route) => false,
     );
   }
 
   @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              Color(0xFF3B2222),
-              Color(0xFF654328),
-              Color(0xFFB59840),
-              Color(0xFFFFEAAA),
-            ],
-            begin: Alignment.bottomLeft,
-            end: Alignment.topRight,
-          ),
-        ),
+      body: SafeArea(
         child: Center(
-          child: FadeTransition(
-            opacity: _fadeIn,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Hero(
-                  tag: "logo",
-                  child: Image.asset(
-                    AssetPaths.logo_gold,
-                    width: 140.sp,
-                    height: 140.sp,
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: _startupError == null
+                ? const SizedBox.square(
+                    dimension: 24,
+                    child: CircularProgressIndicator(
+                      color: Color(0xFFE5A400),
+                      strokeWidth: 2,
+                      semanticsLabel: 'A abrir a tua conta',
+                    ),
+                  )
+                : Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _startupError!,
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 16),
+                      FilledButton(
+                        onPressed: _resolveAndNavigate,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFFE5A400),
+                          foregroundColor: const Color(0xFF24262B),
+                          minimumSize: const Size(160, 48),
+                        ),
+                        child: const Text('Tentar novamente'),
+                      ),
+                    ],
                   ),
-                ),
-                SizedBox(height: 16.sp),
-                Text(
-                  'YA!',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 50.sp,
-                    fontFamily: 'Gagalin',
-                  ),
-                ),
-                SizedBox(height: 12.sp),
-                SizedBox(
-                  width: 20.sp,
-                  height: 20.sp,
-                  child: const CircularProgressIndicator(
-                    color: Colors.amber,
-                    strokeWidth: 3,
-                  ),
-                ),
-              ],
-            ),
           ),
         ),
       ),

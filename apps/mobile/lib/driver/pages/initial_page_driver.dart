@@ -4,13 +4,13 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_animations/flutter_map_animations.dart';
+import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:limousineexecutive/driver/components/agenda_box.dart';
 import 'package:limousineexecutive/driver/components/buttons/zoom_buttons.dart';
+import 'package:limousineexecutive/driver/components/driver_idle_panels.dart';
 import 'package:limousineexecutive/driver/components/dialogs/exit_app_dialog.dart';
-import 'package:limousineexecutive/driver/components/top_bar.dart';
 import 'package:limousineexecutive/driver/components/on_trip_modal.dart';
 import 'package:limousineexecutive/driver/components/ring_modal.dart';
 import 'package:limousineexecutive/driver/components/vehicle_marker.dart';
@@ -38,11 +38,16 @@ class _DriverHomePageState extends State<DriverHomePage>
   StreamSubscription<Position>? _positionStream; // position stream
   List<LatLng> _routePoints = []; // Current route points
   List<Map<String, dynamic>> _allRoutes = []; // all alternative routes
+  late final DriverState _driverState;
+  bool _wasOnTrip = false;
   String token = AppConfig.mapboxToken;
 
   @override
   void initState() {
     super.initState();
+    _driverState = Provider.of<DriverState>(context, listen: false);
+    _wasOnTrip = _driverState.isOnTrip;
+    _driverState.addListener(_handleDriverStateChange);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _getCurrentLocation(context);
       MessagingService.onLogin(); // Ensure token is saved when driver enters the page
@@ -65,8 +70,30 @@ class _DriverHomePageState extends State<DriverHomePage>
   @override
   void dispose() {
     _positionStream?.cancel();
+    _driverState.removeListener(_handleDriverStateChange);
     _animatedMapController.dispose();
     super.dispose();
+  }
+
+  void _handleDriverStateChange() {
+    final isOnTrip = _driverState.isOnTrip;
+    if (_wasOnTrip && !isOnTrip && mounted) {
+      setState(() {
+        _routePoints = [];
+        _allRoutes = [];
+      });
+      final location = _driverState.currentLocation;
+      if (location != null) {
+        _animatedMapController.animateTo(
+          dest: location,
+          zoom: 14,
+          rotation: 0,
+          duration: const Duration(milliseconds: 450),
+          curve: Curves.easeOutCubic,
+        );
+      }
+    }
+    _wasOnTrip = isOnTrip;
   }
 
   Future<void> _getCurrentLocation(BuildContext context) async {
@@ -145,6 +172,12 @@ class _DriverHomePageState extends State<DriverHomePage>
           );
 
       if (mounted) {
+        final route = routes.first;
+        appState.setRouteMetrics(
+          distanceKm: double.tryParse(route['distance']?.toString() ?? '') ?? 0,
+          durationMinutes:
+              double.tryParse(route['duration']?.toString() ?? '') ?? 0,
+        );
         setState(() {
           _allRoutes = routes;
           _routePoints = routes[0]['points'];
@@ -187,6 +220,12 @@ class _DriverHomePageState extends State<DriverHomePage>
           );
 
       if (mounted) {
+        final route = routes.first;
+        appState.setRouteMetrics(
+          distanceKm: double.tryParse(route['distance']?.toString() ?? '') ?? 0,
+          durationMinutes:
+              double.tryParse(route['duration']?.toString() ?? '') ?? 0,
+        );
         setState(() {
           _allRoutes = routes;
           _routePoints = routes[0]['points'];
@@ -214,14 +253,15 @@ class _DriverHomePageState extends State<DriverHomePage>
 
   void startTracking() {
     final appState = Provider.of<DriverState>(context, listen: false);
-    _positionStream = Geolocator.getPositionStream(
+    _positionStream =
+        Geolocator.getPositionStream(
           locationSettings: const LocationSettings(
             accuracy: LocationAccuracy.bestForNavigation,
             distanceFilter: 1, // More precise tracking for navigation
           ),
         ).listen((Position position) {
           final novaPosicao = LatLng(position.latitude, position.longitude);
-          
+
           double angulo = 0;
           if (position.heading != 0) {
             angulo = position.heading * pi / 180;
@@ -271,17 +311,6 @@ class _DriverHomePageState extends State<DriverHomePage>
       _calculateRouteToOrigin();
     }
 
-    if (!appState.isOnTrip && _routePoints.isNotEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          setState(() {
-            _routePoints = [];
-            _allRoutes = [];
-          });
-        }
-      });
-    }
-
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -304,6 +333,8 @@ class _DriverHomePageState extends State<DriverHomePage>
                 initialCenter:
                     appState.currentLocation ?? const LatLng(-25.9692, 32.5732),
                 initialZoom: 14,
+                // Surface shown while network map tiles are loading.
+                backgroundColor: const Color(0xFFF3F1EA),
                 minZoom: 10, // minimum zoom out limit
                 maxZoom: 18, // maximum zoom in limit
                 initialRotation: 0,
@@ -317,6 +348,9 @@ class _DriverHomePageState extends State<DriverHomePage>
                   urlTemplate:
                       "https://api.mapbox.com/styles/v1/mapbox/streets-v12/tiles/256/{z}/{x}/{y}@2x?access_token=$token",
                   subdomains: ['a', 'b', 'c'],
+                  errorTileCallback: (tile, error, stackTrace) {
+                    debugPrint('[DRIVER MAP] Failed to load map tile: $error');
+                  },
                 ),
 
                 if (appState.showRoute && _routePoints.isNotEmpty)
@@ -350,11 +384,15 @@ class _DriverHomePageState extends State<DriverHomePage>
                     // Vehicle marker
                     if (appState.currentLocation != null)
                       AnimatedMarker(
-                        point: appState.currentLocation!, // Always follow current position
+                        point: appState
+                            .currentLocation!, // Always follow current position
                         width: 50.w,
                         height: 50.h,
-                        duration: const Duration(milliseconds: 1000), // Matched with map animation
-                        curve: Curves.linear, // Linear for smoother continuous movement
+                        duration: const Duration(
+                          milliseconds: 1000,
+                        ), // Matched with map animation
+                        curve: Curves
+                            .linear, // Linear for smoother continuous movement
                         builder: (context, animation) {
                           return VehicleMarker(
                             angle: appState.vehicleAngle,
@@ -406,6 +444,15 @@ class _DriverHomePageState extends State<DriverHomePage>
                     MapCompassButton(
                       animatedMapController: _animatedMapController,
                       size: 48.sp,
+                      backgroundColor: const Color(0xFF171918),
+                      borderColor: Colors.amber.withValues(alpha: 0.48),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.amber.withValues(alpha: 0.24),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
                     ),
                     SizedBox(height: 14.sp),
                     ZoomButtons(
@@ -416,7 +463,9 @@ class _DriverHomePageState extends State<DriverHomePage>
                         if (currentZoom <= 17.5) {
                           _animatedMapController.animateTo(
                             dest: _animatedMapController
-                                .mapController.camera.center,
+                                .mapController
+                                .camera
+                                .center,
                             zoom: currentZoom + 0.5,
                             duration: const Duration(milliseconds: 400),
                             curve: Curves.easeInOut,
@@ -430,7 +479,9 @@ class _DriverHomePageState extends State<DriverHomePage>
                         if (currentZoom >= 12.5) {
                           _animatedMapController.animateTo(
                             dest: _animatedMapController
-                                .mapController.camera.center,
+                                .mapController
+                                .camera
+                                .center,
                             zoom: currentZoom - 0.5,
                             duration: const Duration(milliseconds: 400),
                             curve: Curves.easeInOut,
@@ -444,39 +495,22 @@ class _DriverHomePageState extends State<DriverHomePage>
             ),
 
             if (!appState.isOnTrip)
-              /// Top buttons and driver status (Online/offline)
-              Positioned(
-                top: MediaQuery.of(context).padding.top + 10.sp,
-                left: 15.sp,
-                right: 15.sp,
-                child: SizedBox(
-                  width: MediaQuery.of(context).size.width,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: TopBar(onTap: () => _calculateRouteToOrigin()),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-            if (!appState.isOnTrip)
-              // Daily earnings and schedule
-              Positioned(
-                left: 15.sp,
-                right: 15.sp,
-                top: MediaQuery.of(context).padding.top + 100.sp,
-                child: SizedBox(
-                  width: MediaQuery.of(context).size.width,
-                  child: const Row(children: [AgendaBox()]),
+              Positioned.fill(
+                child: DriverIdlePanels(
+                  onRouteRequested: _calculateRouteToOrigin,
+                  watchConnection: () => FirebaseDatabase.instance
+                      .ref('.info/connected')
+                      .onValue
+                      .map((event) => event.snapshot.value == true),
                 ),
               ),
 
             // Trip ring modal when driver is online and phone is ringing
             if (appState.isOnline && appState.isRinging)
-              const Align(alignment: Alignment.bottomCenter, child: RingModal()),
+              const Align(
+                alignment: Alignment.bottomCenter,
+                child: RingModal(),
+              ),
 
             if (appState.isOnTrip)
               Align(

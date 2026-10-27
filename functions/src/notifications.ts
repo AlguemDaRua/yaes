@@ -457,9 +457,15 @@ export const onTripStatusChanged = functions.database
       }
       break;
     case "cancelled":
-      if (oldStatus === "pending" || oldStatus === "accepted") {
-        await sendTo(driverUid, driverToken, "Viagem cancelada", "O passageiro cancelou a viagem.", "trip_cancelled");
-        await sendTo(passengerUid, passengerToken, "Viagem cancelada", "Sua viagem foi cancelada.", "trip_cancelled");
+      if (oldStatus === "pending" || oldStatus === "accepted" || oldStatus === "started") {
+        if (trip.cancelledBy === "driver") {
+          await sendTo(passengerUid, passengerToken, "Viagem cancelada", "O motorista cancelou a viagem. Pode solicitar outro veículo.", "trip_cancelled");
+        } else if (trip.cancelledBy === "passenger") {
+          await sendTo(driverUid, driverToken, "Viagem cancelada", "O passageiro cancelou a viagem.", "trip_cancelled");
+        } else {
+          await sendTo(driverUid, driverToken, "Viagem cancelada", "Esta viagem foi cancelada.", "trip_cancelled");
+          await sendTo(passengerUid, passengerToken, "Viagem cancelada", "A viagem foi cancelada. Pode solicitar outro veículo.", "trip_cancelled");
+        }
       }
       if (trip.driver) await db.ref(`drivers/${trip.driver}`).update({ busy: false });
       break;

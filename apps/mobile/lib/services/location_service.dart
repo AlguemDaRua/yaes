@@ -7,6 +7,70 @@ import 'package:limousineexecutive/passenger/models/passenger_state.dart';
 import 'package:provider/provider.dart';
 
 class LocationService {
+  static bool isGenericLocationLabel(String value) {
+    final label = value.trim().toLowerCase();
+    return label.isEmpty ||
+        const {
+          'minha localização',
+          'minha localizacao',
+          'localização atual',
+          'localizacao atual',
+          'my location',
+        }.contains(label);
+  }
+
+  /// Resolves a coordinate to a nearby street/place label, trying OpenStreetMap
+  /// first and Mapbox as a fallback.
+  static Future<String?> reverseGeocodeLabel(
+    LatLng location, {
+    required String mapboxToken,
+    http.Client? client,
+  }) async {
+    // Use the same Nominatim source as the map picker first. Its reverse
+    // response includes street, house number and neighbourhood details.
+    try {
+      final result = await getPlaceInfoFromNominatim(
+        location.latitude,
+        location.longitude,
+        client: client,
+      );
+      final name = result['name']?.trim();
+      if (name != null && name.isNotEmpty && name.toLowerCase() != 'unknown') {
+        return name;
+      }
+      final fullName = result['fullName']?.trim();
+      if (fullName != null &&
+          fullName.isNotEmpty &&
+          fullName.toLowerCase() != 'unknown') {
+        return fullName;
+      }
+    } catch (_) {
+      // Fall back to Mapbox if OSM is unavailable.
+    }
+
+    try {
+      final result = await getPlaceInfoFromMapbox(
+        location.latitude,
+        location.longitude,
+        mapboxToken,
+        client: client,
+      );
+      final name = result['name']?.trim();
+      if (name != null && name.isNotEmpty && name.toLowerCase() != 'unknown') {
+        return name;
+      }
+      final fullName = result['fullName']?.trim();
+      if (fullName != null &&
+          fullName.isNotEmpty &&
+          fullName.toLowerCase() != 'unknown') {
+        return fullName;
+      }
+    } catch (_) {
+      // The caller supplies a coordinate-based label as the final fallback.
+    }
+    return null;
+  }
+
   static Future<List<Map<String, dynamic>>> fetchRoutesStatic({
     required LatLng origin,
     required LatLng destination,
@@ -115,9 +179,7 @@ class LocationService {
     final httpClient = client ?? http.Client();
     final response = await httpClient.get(
       url,
-      headers: {
-        'User-Agent': 'ya-app/1.0',
-      },
+      headers: {'User-Agent': 'ya-app/1.0'},
     );
 
     if (response.statusCode == 200) {
@@ -218,16 +280,67 @@ class LocationService {
     final response = await httpClient.get(
       Uri.parse(url),
       headers: {
-        "User-Agent": "limousineexecutive-app", // Nominatim requires a User-Agent
+        "User-Agent":
+            "limousineexecutive-app", // Nominatim requires a User-Agent
       },
     );
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
+      final rawAddress = data['address'];
+      final address = rawAddress is Map
+          ? rawAddress
+          : const <String, dynamic>{};
+      String? firstAddressPart(List<String> keys) {
+        for (final key in keys) {
+          final value = address[key]?.toString().trim();
+          if (value != null && value.isNotEmpty) return value;
+        }
+        return null;
+      }
+
+      final road = firstAddressPart([
+        'road',
+        'pedestrian',
+        'residential',
+        'street',
+        'footway',
+        'path',
+        'cycleway',
+      ]);
+      final houseNumber = firstAddressPart(['house_number']);
+      final neighbourhood = firstAddressPart([
+        'neighbourhood',
+        'suburb',
+        'quarter',
+        'city_district',
+      ]);
+      final locality = firstAddressPart([
+        'town',
+        'village',
+        'municipality',
+        'city',
+      ]);
+      final featureName = data['name']?.toString().trim();
+      final specificName = road != null
+          ? [
+              if (houseNumber != null) '$road, $houseNumber' else road,
+              if (neighbourhood != null) neighbourhood,
+            ].join(', ')
+          : (featureName != null &&
+                featureName.isNotEmpty &&
+                featureName.toLowerCase() != locality?.toLowerCase())
+          ? [
+              featureName,
+              if (neighbourhood != null &&
+                  neighbourhood.toLowerCase() != featureName.toLowerCase())
+                neighbourhood,
+            ].join(', ')
+          : neighbourhood ?? locality;
 
       return {
         "type": data['type'] ?? 'Unknown',
-        "name": data['name'] ?? data['display_name'],
+        "name": specificName ?? data['display_name'],
         "fullName": data['display_name'] ?? "unknown",
       };
     } else {
