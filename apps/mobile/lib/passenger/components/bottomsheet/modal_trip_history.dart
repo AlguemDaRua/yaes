@@ -1,11 +1,15 @@
-import 'package:flutter/material.dart';
 import 'package:firebase_database/firebase_database.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:limousineexecutive/repositories/auth_repository.dart';
 import 'package:limousineexecutive/repositories/trip_repository.dart';
-import 'package:provider/provider.dart';
+import 'package:limousineexecutive/shared/models/trip_history_entry.dart';
+import 'package:limousineexecutive/shared/pages/trip_details_page.dart';
 import 'package:limousineexecutive/shared/widgets/skeletons.dart';
+import 'package:limousineexecutive/shared/widgets/trip_status_badge.dart';
+import 'package:provider/provider.dart';
+
 import '../../../utils/asset_paths.dart';
 
 Future<void> showTripHistoryModal(BuildContext context) {
@@ -14,7 +18,7 @@ Future<void> showTripHistoryModal(BuildContext context) {
   final user = authRepo.currentUser;
   if (user == null) return Future.value();
 
-  return showModalBottomSheet(
+  return showModalBottomSheet<void>(
     isDismissible: true,
     backgroundColor: Colors.white,
     enableDrag: true,
@@ -55,7 +59,7 @@ Future<void> showTripHistoryModal(BuildContext context) {
                   ),
                   SizedBox(width: 12.sp),
                   Text(
-                    'Histórico de Viagens',
+                    'Histórico de viagens',
                     style: GoogleFonts.poppins(
                       fontWeight: FontWeight.w700,
                       fontSize: 18.sp,
@@ -70,36 +74,29 @@ Future<void> showTripHistoryModal(BuildContext context) {
               child: StreamBuilder<List<Map<String, dynamic>>>(
                 stream: tripRepo.readTripsByPassenger(user.uid),
                 builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
+                  if (snapshot.hasError) {
+                    return _HistoryMessage(
+                      icon: Icons.cloud_off_rounded,
+                      message:
+                          'Não foi possível carregar o histórico.\nVerifica a ligação e tenta novamente.',
+                    );
+                  }
+                  if (snapshot.connectionState == ConnectionState.waiting &&
+                      !snapshot.hasData) {
                     return const RideHistorySkeleton();
                   }
-                  if (snapshot.hasError) {
-                    debugPrint(snapshot.error.toString());
 
-                    return Center(
-                      child: Text(
-                        'Ocorreu um erro ao carregar o histórico.',
-                        style: GoogleFonts.poppins(),
-                      ),
-                    );
-                  }
+                  final trips = (snapshot.data ?? const <Map<String, dynamic>>[])
+                      .map(TripHistoryEntry.fromMap)
+                      .toList()
+                    ..sort(_compareNewestFirst);
 
-                  final trips = snapshot.data ?? [];
                   if (trips.isEmpty) {
-                    return Center(
-                      child: Text(
-                        'Não possui viagens no histórico.',
-                        style: GoogleFonts.poppins(color: Colors.grey),
-                      ),
+                    return const _HistoryMessage(
+                      icon: Icons.history_rounded,
+                      message: 'Não existem viagens no histórico.',
                     );
                   }
-
-                  // Order trips by date descending
-                  trips.sort((a, b) {
-                    final dateA = _parseDate(a);
-                    final dateB = _parseDate(b);
-                    return dateB.compareTo(dateA);
-                  });
 
                   return ListView.builder(
                     padding: EdgeInsets.symmetric(
@@ -107,9 +104,11 @@ Future<void> showTripHistoryModal(BuildContext context) {
                       vertical: 8.sp,
                     ),
                     itemCount: trips.length,
-                    itemBuilder: (context, index) {
-                      return _buildTripCard(context, user.uid, trips[index]);
-                    },
+                    itemBuilder: (context, index) => _buildTripCard(
+                      context,
+                      user.uid,
+                      trips[index],
+                    ),
                   );
                 },
               ),
@@ -121,77 +120,19 @@ Future<void> showTripHistoryModal(BuildContext context) {
   );
 }
 
-DateTime _parseDate(Map<String, dynamic> trip) {
-  final t = trip['timestamps'];
-  if (t != null && t['created'] != null) {
-    return DateTime.tryParse(t['created']) ?? DateTime.now();
-  }
-  return DateTime.now();
-}
-
-String _formatDateTime(DateTime date) {
-  final day = date.day.toString().padLeft(2, '0');
-  final month = date.month.toString().padLeft(2, '0');
-  final year = date.year;
-  final hour = date.hour.toString().padLeft(2, '0');
-  final minute = date.minute.toString().padLeft(2, '0');
-  return '$day/$month/$year $hour:$minute';
-}
-
-Color _getStatusColor(String status) {
-  switch (status.toLowerCase()) {
-    case 'completed':
-    case 'concluído':
-      return Colors.green;
-    case 'cancelled':
-    case 'cancelado':
-      return Colors.red;
-    case 'started':
-    case 'accepted':
-      return Colors.blue;
-    case 'pending':
-    default:
-      return Colors.amber;
-  }
-}
-
-String _translateStatus(String status) {
-  switch (status.toLowerCase()) {
-    case 'completed':
-      return 'Concluído';
-    case 'cancelled':
-      return 'Cancelado';
-    case 'started':
-      return 'Em Curso';
-    case 'accepted':
-      return 'Aceite';
-    case 'pending':
-      return 'Pendente';
-    default:
-      return status;
-  }
+int _compareNewestFirst(TripHistoryEntry left, TripHistoryEntry right) {
+  final leftDate = left.createdAt;
+  final rightDate = right.createdAt;
+  if (leftDate == null) return rightDate == null ? 0 : 1;
+  if (rightDate == null) return -1;
+  return rightDate.compareTo(leftDate);
 }
 
 Widget _buildTripCard(
   BuildContext context,
   String passengerUid,
-  Map<String, dynamic> trip,
+  TripHistoryEntry trip,
 ) {
-  final created = _parseDate(trip);
-  final timeStr = _formatDateTime(created);
-  final status = trip['status'] ?? 'pending';
-  final translatedStatus = _translateStatus(status);
-  final statusColor = _getStatusColor(status);
-
-  final price = trip['estimatedPrice'] != null
-      ? '${trip['estimatedPrice']} MZN'
-      : '--- MZN';
-
-  final originName = trip['origin']?['name'] ?? 'Origem';
-  final destName = trip['destination']?['name'] ?? 'Destino';
-  final tripType = trip['tipo'] ?? 'Executiva';
-  final List<dynamic> stopsList = trip['stops'] as List<dynamic>? ?? [];
-
   return Container(
     margin: EdgeInsets.only(bottom: 12.sp),
     padding: EdgeInsets.all(16.sp),
@@ -213,7 +154,6 @@ Widget _buildTripCard(
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Placeholder photo
             Container(
               width: 50.sp,
               height: 50.sp,
@@ -230,13 +170,12 @@ Widget _buildTripCard(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Expanded(
                         child: Text(
-                          'Viagem $tripType',
+                          'Viagem ${trip.tripTypeLabel.toLowerCase()}',
                           style: GoogleFonts.poppins(
-                            fontSize: 14.sp,
+                            fontSize: 13.sp,
                             fontWeight: FontWeight.w600,
                             color: Colors.black87,
                           ),
@@ -244,48 +183,27 @@ Widget _buildTripCard(
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      SizedBox(width: 8.sp),
+                      SizedBox(width: 6.sp),
                       Text(
-                        price,
+                        trip.amountLabel,
                         style: GoogleFonts.poppins(
-                          fontSize: 14.sp,
+                          fontSize: 12.sp,
                           fontWeight: FontWeight.w700,
                           color: Colors.black,
                         ),
                       ),
                     ],
                   ),
-                  SizedBox(height: 4.sp),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        timeStr,
-                        style: GoogleFonts.poppins(
-                          fontSize: 12.sp,
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
-                      Container(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 8.sp,
-                          vertical: 2.sp,
-                        ),
-                        decoration: BoxDecoration(
-                          color: statusColor.withAlpha(25),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          translatedStatus,
-                          style: GoogleFonts.poppins(
-                            fontSize: 11.sp,
-                            fontWeight: FontWeight.w600,
-                            color: statusColor,
-                          ),
-                        ),
-                      ),
-                    ],
+                  SizedBox(height: 5.sp),
+                  Text(
+                    trip.createdAtLabel,
+                    style: GoogleFonts.poppins(
+                      fontSize: 11.sp,
+                      color: Colors.grey.shade600,
+                    ),
                   ),
+                  SizedBox(height: 7.sp),
+                  TripStatusBadge(trip: trip, compact: true),
                 ],
               ),
             ),
@@ -294,28 +212,31 @@ Widget _buildTripCard(
         SizedBox(height: 12.sp),
         Divider(color: Colors.grey.withAlpha(40), height: 1),
         SizedBox(height: 12.sp),
-        // Origin
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: EdgeInsets.only(top: 2.sp),
-              child: Icon(Icons.my_location, size: 14.sp, color: Colors.amber),
+        _buildRoutePoint(
+          Icons.my_location,
+          trip.origin,
+          Colors.amber.shade700,
+        ),
+        if (trip.stops.isNotEmpty) ...[
+          Padding(
+            padding: EdgeInsets.only(left: 6.sp, top: 4.sp, bottom: 4.sp),
+            child: Container(
+              width: 2,
+              height: 10.sp,
+              color: Colors.grey.withAlpha(80),
             ),
-            SizedBox(width: 8.sp),
-            Expanded(
-              child: Text(
-                originName,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.poppins(
-                  fontSize: 12.sp,
-                  color: Colors.black87,
-                ),
+          ),
+          ...trip.stops.map(
+            (stop) => Padding(
+              padding: EdgeInsets.only(bottom: 4.sp),
+              child: _buildRoutePoint(
+                Icons.stop_circle_outlined,
+                stop,
+                Colors.blue,
               ),
             ),
-          ],
-        ),
+          ),
+        ],
         Padding(
           padding: EdgeInsets.only(left: 6.sp, top: 4.sp, bottom: 4.sp),
           child: Container(
@@ -324,100 +245,116 @@ Widget _buildTripCard(
             color: Colors.grey.withAlpha(80),
           ),
         ),
-        // Stops
-        ...stopsList.map((stop) {
-          final stopName = stop is Map
-              ? (stop['name'] ?? 'Paragem')
-              : 'Paragem';
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        _buildRoutePoint(Icons.location_on, trip.destination, Colors.red),
+        SizedBox(height: 8.sp),
+        _PassengerRatingStatus(
+          passengerUid: passengerUid,
+          tripId: trip.id,
+        ),
+        Align(
+          alignment: Alignment.centerRight,
+          child: Wrap(
+            alignment: WrapAlignment.end,
+            spacing: 2.sp,
             children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Padding(
-                    padding: EdgeInsets.only(top: 2.sp),
-                    child: Icon(
-                      Icons.stop_circle_outlined,
-                      size: 14.sp,
-                      color: Colors.blue,
-                    ),
+              TextButton.icon(
+                onPressed: () => openTripDetailsPage(
+                  context,
+                  trip: trip,
+                  audience: TripDetailsAudience.passenger,
+                ),
+                icon: Icon(Icons.info_outline_rounded, size: 16.sp),
+                label: Text(
+                  'Ver detalhes',
+                  style: GoogleFonts.poppins(
+                    fontSize: 11.sp,
+                    fontWeight: FontWeight.w600,
                   ),
-                  SizedBox(width: 8.sp),
-                  Expanded(
-                    child: Text(
-                      stopName.toString(),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.poppins(
-                        fontSize: 12.sp,
-                        color: Colors.black87,
-                      ),
-                    ),
-                  ),
-                ],
+                ),
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.blue.shade700,
+                  visualDensity: VisualDensity.compact,
+                ),
               ),
-              Padding(
-                padding: EdgeInsets.only(left: 6.sp, top: 4.sp, bottom: 4.sp),
-                child: Container(
-                  width: 2,
-                  height: 10.sp,
-                  color: Colors.grey.withAlpha(80),
+              TextButton.icon(
+                onPressed: () => _showTripReceipt(context, trip),
+                icon: Icon(Icons.receipt_long_rounded, size: 16.sp),
+                label: Text(
+                  'Recibo',
+                  style: GoogleFonts.poppins(
+                    fontSize: 11.sp,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xFF8A6500),
+                  visualDensity: VisualDensity.compact,
                 ),
               ),
             ],
-          );
-        }),
-        // Destination
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: EdgeInsets.only(top: 2.sp),
-              child: Icon(Icons.location_on, size: 14.sp, color: Colors.red),
-            ),
-            SizedBox(width: 8.sp),
-            Expanded(
-              child: Text(
-                destName,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.poppins(
-                  fontSize: 12.sp,
-                  color: Colors.black87,
-                ),
-              ),
-            ),
-          ],
-        ),
-        SizedBox(height: 10.sp),
-        Row(
-          children: [
-            Expanded(
-              child: _PassengerRatingStatus(
-                passengerUid: passengerUid,
-                tripId: trip['id']?.toString() ?? '',
-              ),
-            ),
-            TextButton.icon(
-              onPressed: () => _showTripReceipt(context, trip),
-              icon: Icon(Icons.receipt_long_rounded, size: 16.sp),
-              label: Text(
-                'Recibo',
-                style: GoogleFonts.poppins(
-                  fontSize: 11.sp,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              style: TextButton.styleFrom(
-                foregroundColor: const Color(0xFF8A6500),
-              ),
-            ),
-          ],
+          ),
         ),
       ],
     ),
   );
+}
+
+Widget _buildRoutePoint(IconData icon, String label, Color color) {
+  return Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Padding(
+        padding: EdgeInsets.only(top: 2.sp),
+        child: Icon(icon, size: 14.sp, color: color),
+      ),
+      SizedBox(width: 8.sp),
+      Expanded(
+        child: Text(
+          label,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: GoogleFonts.poppins(
+            fontSize: 12.sp,
+            color: Colors.black87,
+          ),
+        ),
+      ),
+    ],
+  );
+}
+
+class _HistoryMessage extends StatelessWidget {
+  const _HistoryMessage({
+    required this.icon,
+    required this.message,
+  });
+
+  final IconData icon;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: 28.sp),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 40.sp, color: Colors.grey.shade400),
+            SizedBox(height: 10.sp),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: GoogleFonts.poppins(
+                fontSize: 13.sp,
+                color: Colors.grey.shade600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _PassengerRatingStatus extends StatelessWidget {
@@ -425,6 +362,7 @@ class _PassengerRatingStatus extends StatelessWidget {
     required this.passengerUid,
     required this.tripId,
   });
+
   final String passengerUid;
   final String tripId;
 
@@ -437,42 +375,40 @@ class _PassengerRatingStatus extends StatelessWidget {
           .onValue,
       builder: (context, snapshot) {
         final value = snapshot.data?.snapshot.child('value').value;
-        if (value == null) return const SizedBox.shrink();
-        final rating = (value as num).toDouble();
-        return Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.star_rounded,
-              color: const Color(0xFFE5A400),
-              size: 16.sp,
-            ),
-            SizedBox(width: 4.sp),
-            Text(
-              'Avaliação dada: ${rating.toStringAsFixed(1)}',
-              style: GoogleFonts.poppins(
-                fontSize: 10.sp,
-                color: const Color(0xFF5D5B53),
-                fontWeight: FontWeight.w600,
+        if (value is! num) return const SizedBox.shrink();
+        final rating = value.toDouble();
+        return Padding(
+          padding: EdgeInsets.only(top: 4.sp),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.star_rounded,
+                color: const Color(0xFFE5A400),
+                size: 16.sp,
               ),
-            ),
-          ],
+              SizedBox(width: 4.sp),
+              Text(
+                'Avaliação dada: ${rating.toStringAsFixed(1)}',
+                style: GoogleFonts.poppins(
+                  fontSize: 10.sp,
+                  color: const Color(0xFF5D5B53),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
         );
       },
     );
   }
 }
 
-void _showTripReceipt(BuildContext context, Map<String, dynamic> trip) {
-  final amount = trip['estimatedPrice'] ?? trip['finalPrice'] ?? '—';
-  final paymentMethod = (trip['paymentMethod'] ?? 'Não registado').toString();
-  final origin = trip['origin']?['name']?.toString() ?? 'Origem';
-  final destination = trip['destination']?['name']?.toString() ?? 'Destino';
-  final date = _formatDateTime(_parseDate(trip));
+void _showTripReceipt(BuildContext context, TripHistoryEntry trip) {
   showModalBottomSheet<void>(
     context: context,
     backgroundColor: Colors.transparent,
-    builder: (sheetContext) => Container(
+    builder: (_) => Container(
       padding: EdgeInsets.fromLTRB(22.sp, 14.sp, 22.sp, 26.sp),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -502,13 +438,14 @@ void _showTripReceipt(BuildContext context, Map<String, dynamic> trip) {
           ),
           SizedBox(height: 4.sp),
           Text(
-            date,
+            trip.createdAtLabel,
             style: GoogleFonts.poppins(fontSize: 11.sp, color: Colors.black54),
           ),
           SizedBox(height: 16.sp),
-          _receiptLine('Partida', origin),
-          _receiptLine('Destino', destination),
-          _receiptLine('Pagamento', paymentMethod),
+          _receiptLine('Partida', trip.origin),
+          _receiptLine('Destino', trip.destination),
+          _receiptLine('Pagamento', trip.paymentMethod),
+          _receiptLine('Estado', trip.paymentStatus),
           Divider(height: 24.sp),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -518,7 +455,7 @@ void _showTripReceipt(BuildContext context, Map<String, dynamic> trip) {
                 style: GoogleFonts.poppins(fontWeight: FontWeight.w700),
               ),
               Text(
-                '$amount MT',
+                trip.amountLabel,
                 style: GoogleFonts.poppins(
                   fontSize: 18.sp,
                   fontWeight: FontWeight.w800,
