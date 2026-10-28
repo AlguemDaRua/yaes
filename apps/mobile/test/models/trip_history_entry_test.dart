@@ -40,6 +40,25 @@ void main() {
       expect(trip.cancelledAt, isNotNull);
     });
 
+    test('translates cancellation actors and handles missing audit fields', () {
+      final passengerTrip = TripHistoryEntry.fromMap({
+        'status': 'cancelled',
+        'cancelledBy': 'passenger',
+        'timestamps': {'cancelled': '2026-05-10T09:00:00Z'},
+      });
+      final systemTrip = TripHistoryEntry.fromMap({
+        'status': 'cancelled',
+        'cancelledBy': 'system',
+      });
+
+      expect(passengerTrip.isCancelled, isTrue);
+      expect(passengerTrip.cancelledBy, 'Passageiro');
+      expect(passengerTrip.cancellationReason, 'Motivo não informado');
+      expect(passengerTrip.cancelledAt, isNotNull);
+      expect(systemTrip.cancelledBy, 'Sistema');
+      expect(systemTrip.cancelledAtLabel, 'Data não disponível');
+    });
+
     test('does not infer a payment status when it is absent', () {
       final trip = TripHistoryEntry.fromMap({
         'id': 'legacy-trip',

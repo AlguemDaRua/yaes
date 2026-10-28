@@ -51,13 +51,12 @@ class TripDateFilter {
   bool includes(DateTime? date) {
     if (date == null) return false;
     final localDate = date.toLocal();
-    final firstIncluded = startDate;
     final firstExcluded = DateTime(
       endDate.year,
       endDate.month,
       endDate.day + 1,
     );
-    return !localDate.isBefore(firstIncluded) &&
+    return !localDate.isBefore(startDate) &&
         localDate.isBefore(firstExcluded);
   }
 

@@ -184,10 +184,10 @@ class TripHistoryEntry {
     }
     if (value is Map) {
       final entries = value.entries.toList()
-        ..sort(
-          (a, b) => a.key.toString().compareTo(b.key.toString()),
-        );
-      return List<String>.unmodifiable(entries.map((entry) => _stopLabel(entry.value)));
+        ..sort((a, b) => a.key.toString().compareTo(b.key.toString()));
+      return List<String>.unmodifiable(
+        entries.map((entry) => _stopLabel(entry.value)),
+      );
     }
     return const <String>[];
   }

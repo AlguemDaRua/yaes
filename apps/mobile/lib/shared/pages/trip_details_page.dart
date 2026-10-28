@@ -488,7 +488,8 @@ class _DetailRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final value = detail.value;
-    final isLongValue = detail.label == 'Motivo' || detail.label == 'Identificação';
+    final isLongValue =
+        detail.label == 'Motivo' || detail.label == 'Identificação';
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
